@@ -4274,8 +4274,11 @@ const showToast = (msg) => setToast({ message: msg });
     if (!exists) {
       const sorted = [...updatedHistory].sort((a,b) => new Date(a.date) - new Date(b.date));
       const previousEntry = [...sorted].reverse().find(h => new Date(h.date) < new Date(date));
-      const baseValue = previousEntry ? previousEntry.value : 0; 
-      const baseInvested = previousEntry ? (previousEntry.investedValue || previousEntry.value) : 0;
+      // FIX : Si aucun point d'historique n'est trouvé avant la date, on utilise la valeur
+      // actuelle de l'actif (asset.value) comme base au lieu de 0. Cela garantit que le Cash
+      // s'accumule correctement même si l'historique est vide ou désynchronisé.
+      const baseValue = previousEntry ? previousEntry.value : (typeof asset.value === 'number' ? asset.value : 0); 
+      const baseInvested = previousEntry ? (previousEntry.investedValue || previousEntry.value) : (typeof asset.value === 'number' ? asset.value : 0);
       const isInvestedCompte = asset.type !== 'liquidite';
       const investedDelta = isInvestedCompte ? delta : 0;
       
@@ -4323,8 +4326,37 @@ const showToast = (msg) => setToast({ message: msg });
         
         positions = positions.map(p => {
           if (p.isCash) {
-            // On utilise ton helper existant pour propager le virement dans le temps sur le Cash
-            const newCashHistory = updateAssetHistoryWithDelta(p, date, delta);
+            // FIX : Synchronisation de l'historique du Cash avec sa valeur actuelle.
+            // Si l'historique est vide ou si le dernier point ne reflète pas p.value,
+            // on ajoute un point de correction AVANT d'appliquer le delta.
+            // Cela évite que le Cash soit "remplacé" par le montant du versement
+            // au lieu de s'accumuler (ex: Cash=500, versement=300 → résultat attendu: 800, pas 300).
+            let cashHistory = [...(p.history || [])];
+            if (cashHistory.length === 0) {
+              // Historique vide : on initialise avec la valeur actuelle du Cash
+              cashHistory.push({ date: date, value: p.value });
+            } else {
+              // Vérifier que le dernier point reflète la valeur actuelle
+              const sortedForCheck = [...cashHistory].sort((a, b) => a.date.localeCompare(b.date));
+              const latestPoint = sortedForCheck[sortedForCheck.length - 1];
+              if (Math.abs(latestPoint.value - p.value) > 0.01) {
+                // Désynchronisation détectée : le Cash a été modifié par un mouvement interne
+                // (achat/vente) sans que l'historique ne soit à jour pour ce contexte.
+                // On ajoute ou met à jour un point pour refléter la valeur actuelle.
+                const todayStr = new Date().toISOString().split('T')[0];
+                const existingTodayIdx = cashHistory.findIndex(h => h.date === todayStr);
+                if (existingTodayIdx >= 0) {
+                  cashHistory[existingTodayIdx] = { ...cashHistory[existingTodayIdx], value: p.value };
+                } else {
+                  cashHistory.push({ date: todayStr, value: p.value });
+                  cashHistory.sort((a, b) => a.date.localeCompare(b.date));
+                }
+              }
+            }
+
+            // On applique le delta sur l'historique synchronisé
+            const cashPosWithSyncedHistory = { ...p, history: cashHistory };
+            const newCashHistory = updateAssetHistoryWithDelta(cashPosWithSyncedHistory, date, delta);
             const sortedCashHistory = [...newCashHistory].sort((a, b) => a.date.localeCompare(b.date));
             const latestCash = [...sortedCashHistory].reverse().find(h => h.date <= today);
             const currentCashValue = latestCash ? latestCash.value : parseFloat((p.value + (date <= today ? delta : 0)).toFixed(2));
@@ -4383,7 +4415,26 @@ const showToast = (msg) => setToast({ message: msg });
         }
         positions = positions.map(p => {
           if (p.isCash) {
-            const newCashHistory = updateAssetHistoryWithDelta(p, date, delta);
+            // FIX : Synchronisation de l'historique du Cash (même logique que handleCreateTransaction)
+            let cashHistory = [...(p.history || [])];
+            if (cashHistory.length === 0) {
+              cashHistory.push({ date: date, value: p.value });
+            } else {
+              const sortedForCheck = [...cashHistory].sort((a, b) => a.date.localeCompare(b.date));
+              const latestPoint = sortedForCheck[sortedForCheck.length - 1];
+              if (Math.abs(latestPoint.value - p.value) > 0.01) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const existingTodayIdx = cashHistory.findIndex(h => h.date === todayStr);
+                if (existingTodayIdx >= 0) {
+                  cashHistory[existingTodayIdx] = { ...cashHistory[existingTodayIdx], value: p.value };
+                } else {
+                  cashHistory.push({ date: todayStr, value: p.value });
+                  cashHistory.sort((a, b) => a.date.localeCompare(b.date));
+                }
+              }
+            }
+            const cashPosWithSyncedHistory = { ...p, history: cashHistory };
+            const newCashHistory = updateAssetHistoryWithDelta(cashPosWithSyncedHistory, date, delta);
             const sortedCashHistory = [...newCashHistory].sort((a, b) => a.date.localeCompare(b.date));
             const latestCash = [...sortedCashHistory].reverse().find(h => h.date <= today);
             const currentCashValue = latestCash ? latestCash.value : parseFloat((p.value + (date <= today ? delta : 0)).toFixed(2));
@@ -4445,7 +4496,26 @@ const showToast = (msg) => setToast({ message: msg });
         }
         positions = positions.map(p => {
           if (p.isCash) {
-            const newCashHistory = updateAssetHistoryWithDelta(p, date, delta);
+            // FIX : Synchronisation de l'historique du Cash (même logique que handleCreateTransaction)
+            let cashHistory = [...(p.history || [])];
+            if (cashHistory.length === 0) {
+              cashHistory.push({ date: date, value: p.value });
+            } else {
+              const sortedForCheck = [...cashHistory].sort((a, b) => a.date.localeCompare(b.date));
+              const latestPoint = sortedForCheck[sortedForCheck.length - 1];
+              if (Math.abs(latestPoint.value - p.value) > 0.01) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const existingTodayIdx = cashHistory.findIndex(h => h.date === todayStr);
+                if (existingTodayIdx >= 0) {
+                  cashHistory[existingTodayIdx] = { ...cashHistory[existingTodayIdx], value: p.value };
+                } else {
+                  cashHistory.push({ date: todayStr, value: p.value });
+                  cashHistory.sort((a, b) => a.date.localeCompare(b.date));
+                }
+              }
+            }
+            const cashPosWithSyncedHistory = { ...p, history: cashHistory };
+            const newCashHistory = updateAssetHistoryWithDelta(cashPosWithSyncedHistory, date, delta);
             const sortedCashHistory = [...newCashHistory].sort((a, b) => a.date.localeCompare(b.date));
             const latestCash = [...sortedCashHistory].reverse().find(h => h.date <= today);
             const currentCashValue = latestCash ? latestCash.value : parseFloat((p.value + (date <= today ? delta : 0)).toFixed(2));
