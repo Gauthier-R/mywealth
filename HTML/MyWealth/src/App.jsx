@@ -4592,11 +4592,187 @@ const showToast = (msg) => setToast({ message: msg });
   const triggerMonthlyProcess = async (currentUser, profile, monthKey, isManual = false) => {
     if (!assets || !transactions) return;
 
-    const aiSummary = await callGeminiAPI(
-      "Tu es un expert financier. Analyse ces données et fais un résumé court (10 lignes max). " +
-      "IMPORTANT : N'utilise JAMAIS de Markdown. Utilise uniquement : <br/>, <b>, et <ul>/<li>.",
-      `Patrimoine actuel: ${JSON.stringify(assets)}. Transactions: ${JSON.stringify(transactions?.slice(0, 10))}`
-    );
+    // --- 1. CALCUL DES KPIs DU MOIS ---
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    const monthLabel = startOfMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+    // Patrimoine global
+    const totalPatrimoine = assets.reduce((acc, a) => acc + a.value, 0);
+    const liquidites = assets.filter(a => a.type === 'liquidite').reduce((acc, a) => acc + a.value, 0);
+    const investissements = assets.filter(a => ['investissement', 'crypto', 'immobilier', 'epargne_salariale'].includes(a.type)).reduce((acc, a) => acc + a.value, 0);
+
+    // Évolution mois par mois (via processHistoryData sur 2 mois)
+    const evoData = processHistoryData('6M', assets);
+    let variationPct = '0.0';
+    let variationAbs = 0;
+    if (evoData.length >= 2) {
+      const current = evoData[evoData.length - 1].totalNet;
+      const previous = evoData[evoData.length - 2].totalNet;
+      variationAbs = current - previous;
+      variationPct = previous !== 0 ? ((variationAbs / Math.abs(previous)) * 100).toFixed(1) : '0.0';
+    }
+
+    // Répartition par catégorie
+    const repartition = Object.keys(CATEGORY_LABELS).map(type => {
+      const val = assets.filter(a => a.type === type).reduce((sum, a) => sum + a.value, 0);
+      return { label: CATEGORY_LABELS[type], value: val, pct: totalPatrimoine > 0 ? ((val / totalPatrimoine) * 100).toFixed(1) : '0' };
+    }).filter(r => r.value > 0);
+
+    // Top 5 actifs par valeur
+    const topActifs = [...assets].sort((a, b) => b.value - a.value).slice(0, 5);
+
+    // Plus-values latentes (comptes d'investissement)
+    let totalInvested = 0;
+    let totalCurrentValue = 0;
+    const pvDetails = [];
+    assets.forEach(a => {
+      if (a.positions && a.positions.length > 0) {
+        const supports = a.positions.filter(p => !p.isCash);
+        supports.forEach(p => {
+          if (p.totalInvested && p.totalInvested > 0) {
+            const pv = p.value - p.totalInvested;
+            const pvPct = ((pv / p.totalInvested) * 100).toFixed(1);
+            pvDetails.push({ name: p.name, account: a.name, pv, pvPct, value: p.value, invested: p.totalInvested });
+            totalInvested += p.totalInvested;
+            totalCurrentValue += p.value;
+          }
+        });
+      }
+    });
+    const totalPV = totalCurrentValue - totalInvested;
+    const totalPVPct = totalInvested > 0 ? ((totalPV / totalInvested) * 100).toFixed(1) : '0.0';
+
+    // Budget du mois (revenus vs dépenses)
+    const monthTransactions = transactions.filter(t => {
+      const d = new Date(t.date);
+      return d >= startOfMonth && d <= endOfMonth;
+    });
+    const revenus = monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const depenses = monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const epargne = revenus - depenses;
+    const tauxEpargne = revenus > 0 ? ((epargne / revenus) * 100).toFixed(0) : '0';
+
+    // Top catégories de dépenses
+    const depensesByCategory = {};
+    monthTransactions.filter(t => t.type === 'expense').forEach(t => {
+      const cat = t.category || 'Autre';
+      depensesByCategory[cat] = (depensesByCategory[cat] || 0) + t.amount;
+    });
+    const topDepenses = Object.entries(depensesByCategory).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    // --- 2. CONSTRUCTION DU CONTEXTE POUR L'IA ---
+    const dataContext = `
+BILAN FINANCIER DU MOIS DE ${monthLabel.toUpperCase()} :
+
+PATRIMOINE :
+- Patrimoine Net : ${formatCurrency(totalPatrimoine)}
+- Variation mensuelle : ${parseFloat(variationPct) >= 0 ? '+' : ''}${variationPct}% (${variationAbs >= 0 ? '+' : ''}${formatCurrency(variationAbs)})
+- Liquidités : ${formatCurrency(liquidites)}
+- Actifs investis : ${formatCurrency(investissements)}
+
+RÉPARTITION :
+${repartition.map(r => `- ${r.label} : ${formatCurrency(r.value)} (${r.pct}%)`).join('\n')}
+
+TOP 5 ACTIFS :
+${topActifs.map(a => `- ${a.name} (${a.institution || 'N/A'}) : ${formatCurrency(a.value)}`).join('\n')}
+
+PLUS-VALUES LATENTES (si investissements) :
+- Total investi : ${formatCurrency(totalInvested)}
+- Valeur actuelle : ${formatCurrency(totalCurrentValue)}
+- Plus-value globale : ${totalPV >= 0 ? '+' : ''}${formatCurrency(totalPV)} (${totalPVPct}%)
+${pvDetails.length > 0 ? pvDetails.map(p => `  └─ ${p.name} (${p.account}) : ${p.pv >= 0 ? '+' : ''}${formatCurrency(p.pv)} (${p.pvPct}%)`).join('\n') : '  Aucun support en portefeuille.'}
+
+BUDGET DU MOIS :
+- Revenus : ${formatCurrency(revenus)}
+- Dépenses : ${formatCurrency(depenses)}
+- Épargne nette : ${formatCurrency(epargne)} (Taux d'épargne : ${tauxEpargne}%)
+${topDepenses.length > 0 ? 'Top dépenses :\n' + topDepenses.map(([cat, val]) => `  - ${cat} : ${formatCurrency(val)}`).join('\n') : '  Aucune dépense enregistrée.'}
+
+PROFIL :
+- ${profile.firstName || 'Utilisateur'}, Risque : ${profile.riskProfile || 'Equilibré'}, Objectif : ${profile.financialGoal || 'Indépendance'}
+- Revenu mensuel déclaré : ${profile.monthlyIncome ? formatCurrency(Number(profile.monthlyIncome)) : 'Non précisé'}
+`;
+
+    const systemPrompt = `Tu es le Conseiller Patrimonial IA de MyWealth.io. Tu rédiges un rapport mensuel envoyé par email.
+
+OBJECTIF : Rédiger une analyse personnalisée du mois écoulé. Le rapport doit être clair, structuré, et apporter une vraie valeur ajoutée à l'utilisateur.
+
+STRUCTURE OBLIGATOIRE DU RAPPORT (respecte cet ordre) :
+1. RÉSUMÉ DU MOIS (2-3 phrases synthétiques : patrimoine, tendance, fait marquant)
+2. ANALYSE DU PATRIMOINE (variation, ce qui a bougé et pourquoi)
+3. FOCUS INVESTISSEMENTS (plus-values, performances des supports, recommandation si pertinent)
+4. BUDGET & DÉPENSES (revenus vs dépenses, taux d'épargne, postes principaux, alerte si dérapage)
+5. CONSEIL DU MOIS (1 action concrète et personnalisée à réaliser avant le mois prochain)
+
+RÈGLES DE FORMAT :
+- HTML UNIQUEMENT pour l'email. Utilise <b>, <br/>, <ul>/<li>, <span style="color:...">.
+- JAMAIS de Markdown (pas de **, ##, -, etc.)
+- Utilise <span style="color:#10b981"> pour les chiffres positifs et <span style="color:#ef4444"> pour les négatifs.
+- Sois concis : 15-20 lignes max au total.
+- Tutoie l'utilisateur, sois direct et bienveillant.
+- N'invente aucun chiffre. Utilise uniquement les données fournies.`;
+
+    let aiSummary;
+    try {
+      aiSummary = await callGeminiAPI(systemPrompt, [], dataContext);
+    } catch (e) {
+      aiSummary = `Une erreur est survenue : ${e.message}`;
+    }
+
+    // --- 3. CONSTRUCTION DU CONTENU HTML DU RAPPORT ---
+    const reportHTML = `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
+  
+  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding:20px; border-radius:12px; text-align:center;">
+        <span style="color:white; font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">📊 Bilan Patrimonial</span><br/>
+        <span style="color:white; font-size:28px; font-weight:800;">${formatCurrency(totalPatrimoine)}</span><br/>
+        <span style="color:${parseFloat(variationPct) >= 0 ? '#86efac' : '#fca5a5'}; font-size:14px; font-weight:600;">
+          ${parseFloat(variationPct) >= 0 ? '▲' : '▼'} ${parseFloat(variationPct) >= 0 ? '+' : ''}${variationPct}% ce mois (${variationAbs >= 0 ? '+' : ''}${formatCurrency(variationAbs)})
+        </span>
+      </td>
+    </tr>
+  </table>
+
+  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+    <tr>
+      <td style="width:33%; padding:10px; text-align:center; background:#f8fafc; border-radius:8px;">
+        <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:600;">Liquidités</span><br/>
+        <span style="font-size:18px; font-weight:700; color:#3b82f6;">${formatCurrency(liquidites)}</span>
+      </td>
+      <td style="width:33%; padding:10px; text-align:center; background:#f8fafc; border-radius:8px;">
+        <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:600;">Investis</span><br/>
+        <span style="font-size:18px; font-weight:700; color:#10b981;">${formatCurrency(investissements)}</span>
+      </td>
+      <td style="width:33%; padding:10px; text-align:center; background:#f8fafc; border-radius:8px;">
+        <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:600;">Plus-value</span><br/>
+        <span style="font-size:18px; font-weight:700; color:${totalPV >= 0 ? '#10b981' : '#ef4444'};">${totalPV >= 0 ? '+' : ''}${formatCurrency(totalPV)}</span>
+      </td>
+    </tr>
+  </table>
+
+  ${revenus > 0 || depenses > 0 ? `
+  <table style="width:100%; border-collapse:collapse; margin-bottom:20px; background:#f8fafc; border-radius:8px;">
+    <tr>
+      <td style="padding:12px;">
+        <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:#334155;">💰 Budget du mois</span><br/><br/>
+        <span style="color:#10b981; font-weight:600;">Revenus : ${formatCurrency(revenus)}</span> &nbsp;|&nbsp; 
+        <span style="color:#ef4444; font-weight:600;">Dépenses : ${formatCurrency(depenses)}</span> &nbsp;|&nbsp; 
+        <span style="font-weight:700;">Épargne : ${formatCurrency(epargne)} (${tauxEpargne}%)</span>
+        ${topDepenses.length > 0 ? '<br/><br/><span style="font-size:11px; color:#64748b;">Top dépenses : ' + topDepenses.map(([cat, val]) => `<b>${cat}</b> ${formatCurrency(val)}`).join(' · ') + '</span>' : ''}
+      </td>
+    </tr>
+  </table>` : ''}
+
+  <div style="background:#f0f0ff; border-left:4px solid #6366f1; padding:16px; border-radius:0 8px 8px 0; margin-bottom:20px;">
+    <span style="font-size:13px; font-weight:700; color:#4338ca;">✨ ANALYSE DE VOTRE CONSEILLER IA</span><br/><br/>
+    <span style="font-size:13px; color:#334155; line-height:1.6;">${aiSummary}</span>
+  </div>
+
+</div>`;
 
     const backupJSON = JSON.stringify({ assets, transactions, profile, date: monthKey });
 
@@ -4604,8 +4780,8 @@ const showToast = (msg) => setToast({ message: msg });
       await emailjs.send("service_htd01wn", "template_ac5mdxf", {
         to_email: profile.email || currentUser.email,
         user_name: profile.firstName,
-        month: monthKey,
-        report_content: aiSummary,
+        month: monthLabel,
+        report_content: reportHTML,
         backup_data: backupJSON
       });
 
