@@ -1,0 +1,48 @@
+// Règles de sécurité Firebase Firestore
+// Ces règles protègent les données contre les accès non autorisés
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Fonction helper: vérifie si l'utilisateur est authentifié
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Fonction helper: vérifie si l'utilisateur accède à ses propres données
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Collection principale: users/{userId}/assets
+    match /users/{userId}/assets {
+      // Seul le propriétaire peut lire/écrire ses actifs
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow write: if isAuthenticated() && isOwner(userId);
+      
+      // Validation des documents
+      allow create: if isAuthenticated() && isOwner(userId) &&
+        request.resource.data.keys().size() <= 20; // Limite de 20 actifs par utilisateur
+    }
+    
+    // Collection principale: users/{userId}/transactions
+    match /users/{userId}/transactions {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow write: if isAuthenticated() && isOwner(userId);
+      
+      // Validation des transactions
+      allow create: if isAuthenticated() && isOwner(userId) &&
+        request.resource.data.keys().size() <= 30;
+      
+      // Empêcher la modification des champs sensibles
+      allow update: if isAuthenticated() && isOwner(userId) &&
+        request.resource.data.keys().hasAll(['date', 'label', 'amount', 'type', 'category']);
+    }
+    
+    // Collection principale: users/{userId}/profile
+    match /users/{userId}/profile {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
+  }
+}

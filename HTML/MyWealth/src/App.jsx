@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { 
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area,
@@ -38,21 +39,15 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
 
-// --- API CONFIGURATION ---
-const apiKey = "AIzaSyCjcJoVxEkJG76D1yUbdocgxlmhqdPBNOE"; // Clef API pour Gemini
-// --- INITIALISATION EMAILJS ---
-emailjs.init("OvBeXwPPROzqE2kQL"); // Clef API pour EmailJS
+// --- CONFIGURATION ENVIRONNEMENT ---
+import ENV_CONFIG from './config/environment';
 
-// --- FIREBASE CONFIGURATION ---
-const firebaseConfig = {
-  apiKey: "AIzaSyD3EFbSF-t0j3a6cXi-P1RYPe5sc-Yvk5c",
-  authDomain: "nodejsfinary.firebaseapp.com",
-  projectId: "nodejsfinary",
-  storageBucket: "nodejsfinary.firebasestorage.app",
-  messagingSenderId: "451755528730",
-  appId: "1:451755528730:web:5140e4835f4bbe98b0f7a3",
-  measurementId: "G-HP09H5QM5N"
-};
+// --- API CONFIGURATION (via variables d'environnement) ---
+const apiKey = ENV_CONFIG.GEMINI_API_KEY;
+emailjs.init(ENV_CONFIG.EMAILJS_PUBLIC_KEY);
+
+// --- FIREBASE CONFIGURATION (via variables d'environnement) ---
+const firebaseConfig = ENV_CONFIG.FIREBASE_CONFIG;
 
 // Initialize Firebase
 let app;
@@ -4723,53 +4718,63 @@ RÈGLES DE FORMAT :
 
     // --- 3. CONSTRUCTION DU CONTENU HTML DU RAPPORT ---
     const reportHTML = `
-<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
+<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 10px;">
   
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-    <tr>
-      <td style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding:20px; border-radius:12px; text-align:center;">
-        <span style="color:white; font-size:14px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">📊 Bilan Patrimonial</span><br/>
-        <span style="color:white; font-size:28px; font-weight:800;">${formatCurrency(totalPatrimoine)}</span><br/>
-        <span style="color:${parseFloat(variationPct) >= 0 ? '#86efac' : '#fca5a5'}; font-size:14px; font-weight:600;">
-          ${parseFloat(variationPct) >= 0 ? '▲' : '▼'} ${parseFloat(variationPct) >= 0 ? '+' : ''}${variationPct}% ce mois (${variationAbs >= 0 ? '+' : ''}${formatCurrency(variationAbs)})
-        </span>
-      </td>
-    </tr>
-  </table>
+  <div style="text-align: center; margin-bottom: 25px;">
+    <h2 style="margin: 0; color: #0f172a; font-size: 22px;">Bilan Patrimonial</h2>
+    <p style="margin: 5px 0 0 0; font-size: 32px; font-weight: 800; color: #2563eb;">${formatCurrency(totalPatrimoine)}</p>
+    <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 600; color: ${parseFloat(variationPct) >= 0 ? '#10b981' : '#ef4444'};">
+      ${parseFloat(variationPct) >= 0 ? '▲' : '▼'} ${parseFloat(variationPct) >= 0 ? '+' : ''}${variationPct}% ce mois (${variationAbs >= 0 ? '+' : ''}${formatCurrency(variationAbs)})
+    </p>
+  </div>
 
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 25px; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
     <tr>
-      <td style="width:33%; padding:10px; text-align:center; background:#f8fafc; border-radius:8px;">
-        <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:600;">Liquidités</span><br/>
-        <span style="font-size:18px; font-weight:700; color:#3b82f6;">${formatCurrency(liquidites)}</span>
+      <td width="33%" align="center" style="padding: 15px 5px; border-right: 1px solid #e2e8f0;">
+        <p style="margin: 0; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Liquidités</p>
+        <p style="margin: 5px 0 0 0; font-size: 16px; font-weight: 700; color: #0f172a;">${formatCurrency(liquidites)}</p>
       </td>
-      <td style="width:33%; padding:10px; text-align:center; background:#f8fafc; border-radius:8px;">
-        <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:600;">Investis</span><br/>
-        <span style="font-size:18px; font-weight:700; color:#10b981;">${formatCurrency(investissements)}</span>
+      <td width="33%" align="center" style="padding: 15px 5px; border-right: 1px solid #e2e8f0;">
+        <p style="margin: 0; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Investis</p>
+        <p style="margin: 5px 0 0 0; font-size: 16px; font-weight: 700; color: #0f172a;">${formatCurrency(investissements)}</p>
       </td>
-      <td style="width:33%; padding:10px; text-align:center; background:#f8fafc; border-radius:8px;">
-        <span style="font-size:11px; color:#64748b; text-transform:uppercase; font-weight:600;">Plus-value</span><br/>
-        <span style="font-size:18px; font-weight:700; color:${totalPV >= 0 ? '#10b981' : '#ef4444'};">${totalPV >= 0 ? '+' : ''}${formatCurrency(totalPV)}</span>
+      <td width="33%" align="center" style="padding: 15px 5px;">
+        <p style="margin: 0; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Plus-value</p>
+        <p style="margin: 5px 0 0 0; font-size: 16px; font-weight: 700; color: ${totalPV >= 0 ? '#10b981' : '#ef4444'};">${totalPV >= 0 ? '+' : ''}${formatCurrency(totalPV)}</p>
       </td>
     </tr>
   </table>
 
   ${revenus > 0 || depenses > 0 ? `
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px; background:#f8fafc; border-radius:8px;">
-    <tr>
-      <td style="padding:12px;">
-        <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:#334155;">💰 Budget du mois</span><br/><br/>
-        <span style="color:#10b981; font-weight:600;">Revenus : ${formatCurrency(revenus)}</span> &nbsp;|&nbsp; 
-        <span style="color:#ef4444; font-weight:600;">Dépenses : ${formatCurrency(depenses)}</span> &nbsp;|&nbsp; 
-        <span style="font-weight:700;">Épargne : ${formatCurrency(epargne)} (${tauxEpargne}%)</span>
-        ${topDepenses.length > 0 ? '<br/><br/><span style="font-size:11px; color:#64748b;">Top dépenses : ' + topDepenses.map(([cat, val]) => `<b>${cat}</b> ${formatCurrency(val)}`).join(' · ') + '</span>' : ''}
-      </td>
-    </tr>
-  </table>` : ''}
+  <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
+    <h3 style="margin: 0 0 10px 0; font-size: 13px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Flux du mois</h3>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td width="50%" style="padding-bottom: 8px;">
+          <span style="font-size: 13px; color: #64748b;">Revenus</span><br/>
+          <strong style="font-size: 14px; color: #10b981;">${formatCurrency(revenus)}</strong>
+        </td>
+        <td width="50%" style="padding-bottom: 8px;">
+          <span style="font-size: 13px; color: #64748b;">Dépenses</span><br/>
+          <strong style="font-size: 14px; color: #ef4444;">${formatCurrency(depenses)}</strong>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="padding-top: 8px; border-top: 1px dashed #cbd5e1;">
+          <span style="font-size: 13px; color: #64748b;">Épargne générée :</span> 
+          <strong style="font-size: 14px; color: #0f172a;">${formatCurrency(epargne)}</strong> 
+          <span style="font-size: 12px; color: #94a3b8;">(${tauxEpargne}%)</span>
+        </td>
+      </tr>
+    </table>
+    ${topDepenses.length > 0 ? `<p style="margin: 10px 0 0 0; font-size: 12px; color: #64748b;"><strong>Top dépenses :</strong> ${topDepenses.map(([cat, val]) => `${cat} (${formatCurrency(val)})`).join(', ')}</p>` : ''}
+  </div>` : ''}
 
-  <div style="background:#f0f0ff; border-left:4px solid #6366f1; padding:16px; border-radius:0 8px 8px 0; margin-bottom:20px;">
-    <span style="font-size:13px; font-weight:700; color:#4338ca;">✨ ANALYSE DE VOTRE CONSEILLER IA</span><br/><br/>
-    <span style="font-size:13px; color:#334155; line-height:1.6;">${aiSummary}</span>
+  <div style="margin-top: 25px;">
+    <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #0f172a; border-bottom: 2px solid #2563eb; display: inline-block; padding-bottom: 4px;">Analyse & Conseils</h3>
+    <div style="font-size: 14px; line-height: 1.6; color: #334155;">
+      ${aiSummary}
+    </div>
   </div>
 
 </div>`;

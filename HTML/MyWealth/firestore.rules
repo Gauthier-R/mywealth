@@ -1,0 +1,45 @@
+// Règles de sécurité Firebase Firestore
+// Ces règles protègent les données contre les accès non autorisés
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Fonction helper: vérifie si l'utilisateur est authentifié
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Fonction helper: vérifie si l'utilisateur accède à ses propres données
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Collection racine: artifacts/{appId} (Spécifique à l'architecture de MyWealth)
+    match /artifacts/{appId} {
+      
+      // Collection principale: users/{userId}
+      match /users/{userId} {
+        
+        // Sous-collection: profile/info
+        match /profile/info {
+          allow read, write: if isAuthenticated() && isOwner(userId);
+        }
+        
+        // Sous-collection: data/assets
+        match /data/assets {
+          allow read, write: if isAuthenticated() && isOwner(userId);
+        }
+        
+        // Sous-collection: data/transactions
+        match /data/transactions {
+          allow read, write: if isAuthenticated() && isOwner(userId);
+        }
+        
+        // Sous-collection: data (document unique)
+        match /data/{document=**} {
+          allow read, write: if isAuthenticated() && isOwner(userId);
+        }
+      }
+    }
+  }
+}

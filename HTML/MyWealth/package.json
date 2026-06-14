@@ -11,14 +11,14 @@
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
+    "dompurify": "^3.4.10",
     "firebase": "^12.6.0",
     "lucide-react": "^0.561.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-is": "^19.2.4",
     "react-joyride": "^2.9.3",
-    "recharts": "^3.5.1",
-    "tailwind": "^2.3.1"
+    "recharts": "^3.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
