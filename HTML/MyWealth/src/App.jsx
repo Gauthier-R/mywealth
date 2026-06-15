@@ -225,46 +225,24 @@ const processFlowData = (timeRange, transactions) => {
 // --- API HELPER ---
 async function callGeminiAPI(systemPrompt, chatHistory, userPrompt, imageBase64 = null) {
   try {
-    // 1. On convertit l'historique local vers le format "user/model" attendu par Gemini
-    const contents = (chatHistory || []).map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }]
-    }));
+    // On appelle notre propre API Vercel de façon sécurisée
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemPrompt,
+        chatHistory,
+        userPrompt,
+        imageBase64
+      })
+    });
 
-    // 2. On prépare le tout nouveau message
-    const currentParts = [{ text: userPrompt }];
-    
-    // Ajout de l'image si elle existe (format attendu : data:image/jpeg;base64,...)
-    if (imageBase64) {
-      currentParts.push({
-        inline_data: {
-          mime_type: imageBase64.split(';')[0].split(':')[1],
-          data: imageBase64.split(',')[1]
-        }
-      });
-    }
-    
-    // 3. On ajoute ce nouveau message à la fin de l'historique
-    contents.push({ role: "user", parts: currentParts });
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          system_instruction: { parts: [{ text: systemPrompt }] }, // Le comportement global est géré ici proprement
-          contents: contents, // L'historique complet de la discussion
-          tools: [{ googleSearch: {} }] // Activation de la recherche Web
-        })
-      }
-    );
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      // On affiche le message d'erreur détaillé de Google pour le diagnostic
-      throw new Error(errorData.error?.message || `Erreur ${response.status}`);
-    }
     const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || `Erreur ${response.status}`);
+    }
+    
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "Désolé, je n'ai pas pu analyser les données.";
   } catch (error) {
     console.error("Gemini API Error:", error);
@@ -272,20 +250,6 @@ async function callGeminiAPI(systemPrompt, chatHistory, userPrompt, imageBase64 
   }
 }
 
-// Fonction de diagnostic pour lister tes modèles autorisés
-async function listAvailableModels() {
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
-    const data = await res.json();
-    console.log("--- MODÈLES GEMINI DISPONIBLES ---");
-    data.models?.forEach(m => console.log(m.name));
-    console.log("----------------------------------");
-  } catch (e) {
-    console.error("Erreur listing modèles:", e);
-  }
-}
-// Appelle-la une fois pour voir le résultat dans ta console
-listAvailableModels();
 
 // --- UI COMPONENTS ---
 
@@ -3576,6 +3540,12 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
           setError("Nom et Prénom requis");
           return;
         }
+          // Validation de la complexité du mot de passe
+          const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+          if (!passwordRegex.test(password)) {
+            setError("Le mot de passe doit contenir au moins 8 caractères, incluant des lettres et des chiffres.");
+            return;
+          }
         await onEmailRegister(email, password, { 
             firstName, 
             lastName,
@@ -3593,11 +3563,14 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
     } catch (e) {
       let msg = e.message;
       if (msg.includes('auth/invalid-email')) msg = "Email invalide.";
-      else if (msg.includes('auth/user-not-found')) msg = "Compte inexistant. Vérifiez vos identifiants.";
-      else if (msg.includes('auth/wrong-password')) msg = "Mot de passe incorrect.";
+      // Message d'erreur générique pour contrer l'énumération d'utilisateurs
+      else if (msg.includes('auth/user-not-found') || msg.includes('auth/wrong-password') || msg.includes('auth/invalid-credential')) {
+        msg = "Identifiants incorrects.";
+      }
       else if (msg.includes('auth/email-already-in-use')) msg = "Cet email est déjà utilisé.";
       else if (msg.includes('auth/weak-password')) msg = "Le mot de passe doit faire au moins 6 caractères.";
-      else if (msg.includes('auth/invalid-credential')) msg = "Identifiants invalides.";
+      // Gestion explicite de la protection anti brute-force de Firebase
+      else if (msg.includes('auth/too-many-requests')) msg = "Trop de tentatives échouées. Veuillez réessayer plus tard.";
       setError(msg);
     }
   };
