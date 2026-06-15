@@ -4912,7 +4912,7 @@ RÈGLES DE FORMAT :
           </div>
           <div className="flex gap-1 bg-slate-100 p-1 rounded-lg overflow-x-auto">
             {[
-              { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+              { id: 'dashboard', label: 'Dashboard blabla', icon: LayoutDashboard },
               { id: 'assets', label: 'Patrimoine', icon: Wallet },
               { id: 'budget', label: 'Budget & Flux', icon: ArrowRightLeft },
               { id: 'advisor', label: 'Conseiller IA ✨', icon: Sparkles, magic: true }
