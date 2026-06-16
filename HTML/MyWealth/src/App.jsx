@@ -52,9 +52,12 @@ const firebaseConfig = ENV_CONFIG.FIREBASE_CONFIG;
 // Initialize Firebase
 let app;
 try {
+  if (!firebaseConfig || !firebaseConfig.apiKey) {
+    console.error("⚠️ ERREUR : La clé API Firebase est manquante. Vérifiez votre fichier .env.local ou lancez 'vercel env pull'.");
+  }
   app = initializeApp(firebaseConfig);
 } catch (e) {
-  // Ignore
+  console.error("Erreur lors de l'initialisation de Firebase :", e);
 }
 
 const auth = getAuth(app);
@@ -225,24 +228,48 @@ const processFlowData = (timeRange, transactions) => {
 // --- API HELPER ---
 async function callGeminiAPI(systemPrompt, chatHistory, userPrompt, imageBase64 = null) {
   try {
-    // On appelle notre propre API Vercel de façon sécurisée
-    const response = await fetch('/api/gemini', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemPrompt,
-        chatHistory,
-        userPrompt,
-        imageBase64
-      })
-    });
+    // 1. On convertit l'historique local vers le format attendu par Gemini
+    const contents = (chatHistory || []).map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    }));
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || `Erreur ${response.status}`);
+    // 2. On prépare le tout nouveau message
+    const currentParts = [{ text: userPrompt }];
+    
+    // Ajout de l'image si elle existe
+    if (imageBase64) {
+      currentParts.push({
+        inline_data: {
+          mime_type: imageBase64.split(';')[0].split(':')[1],
+          data: imageBase64.split(',')[1]
+        }
+      });
     }
     
+    // 3. On ajoute ce nouveau message à la fin de l'historique
+    contents.push({ role: "user", parts: currentParts });
+
+    // APPEL DIRECT À GOOGLE (Sans passer par un backend Vercel)
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: contents,
+          tools: [{ googleSearch: {} }] 
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `Erreur ${response.status}`);
+    }
+
+    const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "Désolé, je n'ai pas pu analyser les données.";
   } catch (error) {
     console.error("Gemini API Error:", error);
