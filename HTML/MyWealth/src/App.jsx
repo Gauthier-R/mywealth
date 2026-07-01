@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import DOMPurify from 'dompurify';
-import { 
-  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, 
+import {
+  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area,
   LineChart, Line, Treemap, ComposedChart, ReferenceLine, Sector
 } from 'recharts';
-import { 
+import {
   LayoutDashboard, Wallet, ArrowRightLeft, TrendingUp, PieChart as PieIcon,
-  PlusCircle, Trash2, Building, DollarSign, 
+  PlusCircle, Trash2, Building, DollarSign,
   ArrowUpRight, ArrowDownRight, Sparkles, MessageSquare, Send,
   Bot, Loader2, Calendar, X, Eye, EyeOff, ShieldCheck, Activity,
   ChevronLeft, History, List, Save, Grid, Circle, TrendingDown, Edit, Search,
@@ -24,16 +24,16 @@ import Joyride, { STATUS } from 'react-joyride';
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
 import { getAnalytics } from "firebase/analytics";
-import { 
-  getAuth, 
-  signInAnonymously, 
-  onAuthStateChanged, 
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged,
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect, 
+  signInWithRedirect,
   sendPasswordResetEmail,
   updateProfile
 } from 'firebase/auth';
@@ -41,6 +41,10 @@ import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestor
 
 // --- CONFIGURATION ENVIRONNEMENT ---
 import ENV_CONFIG from './config/environment';
+
+// --- CONFIGURATION GoCardless ---
+import GoCardlessSetup from './GoCardlessSetup';
+import BankSyncDashboard from './BankSyncDashboard';
 
 // --- API CONFIGURATION (via variables d'environnement) ---
 const apiKey = ENV_CONFIG.GEMINI_API_KEY;
@@ -173,7 +177,7 @@ const processHistoryData = (timeRange, currentAssets) => {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const endOfMonthDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
     const monthName = date.toLocaleDateString('fr-FR', { month: 'short', year: i > 12 ? '2-digit' : undefined });
-    
+
     let breakdown = { liquidite: 0, investissement: 0, immobilier: 0, crypto: 0, autre: 0, epargne_salariale: 0 };
     let totalNet = 0;
 
@@ -186,7 +190,7 @@ const processHistoryData = (timeRange, currentAssets) => {
           const sortedHistory = [...asset.history].sort((a, b) => new Date(a.date) - new Date(b.date));
           const record = sortedHistory.filter(h => new Date(h.date) <= endOfMonthDate).pop();
           if (record) valueAtDate = record.value;
-          else valueAtDate = 0; 
+          else valueAtDate = 0;
         } else {
           valueAtDate = asset.value;
         }
@@ -194,7 +198,7 @@ const processHistoryData = (timeRange, currentAssets) => {
       if (breakdown[asset.type] !== undefined) breakdown[asset.type] += valueAtDate;
       totalNet += valueAtDate;
     });
-    
+
     data.push({ month: monthName, ...breakdown, totalNet: totalNet });
   }
   return data;
@@ -208,14 +212,14 @@ const processFlowData = (timeRange, transactions) => {
 
   for (let i = monthsBack; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    
+
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
-    const monthKey = `${year}-${month}`; 
-    
+    const monthKey = `${year}-${month}`;
+
     const monthName = date.toLocaleDateString('fr-FR', { month: 'short', year: i > 12 ? '2-digit' : undefined });
     const monthTrans = safeTransactions.filter(t => t.date.startsWith(monthKey));
-    
+
     const revenus = monthTrans.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
     const depenses = monthTrans.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
     const solde = revenus - depenses;
@@ -236,7 +240,7 @@ async function callGeminiAPI(systemPrompt, chatHistory, userPrompt, imageBase64 
 
     // 2. On prépare le tout nouveau message
     const currentParts = [{ text: userPrompt }];
-    
+
     // Ajout de l'image si elle existe
     if (imageBase64) {
       currentParts.push({
@@ -246,7 +250,7 @@ async function callGeminiAPI(systemPrompt, chatHistory, userPrompt, imageBase64 
         }
       });
     }
-    
+
     // 3. On ajoute ce nouveau message à la fin de l'historique
     contents.push({ role: "user", parts: currentParts });
 
@@ -256,10 +260,10 @@ async function callGeminiAPI(systemPrompt, chatHistory, userPrompt, imageBase64 
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: contents,
-          tools: [{ googleSearch: {} }] 
+          tools: [{ googleSearch: {} }]
         })
       }
     );
@@ -299,7 +303,7 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
   );
 };
 
-const ProfileModal = ({ isOpen, onClose, userProfile, onUpdate, assets, transactions, onRestore }) => {
+const ProfileModal = ({ isOpen, onClose, user, userProfile, onUpdate, assets, transactions, onRestore }) => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -392,9 +396,9 @@ const ProfileModal = ({ isOpen, onClose, userProfile, onUpdate, assets, transact
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({ 
-      ...prev, 
-      [name]: type === 'checkbox' ? checked : value 
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
@@ -436,7 +440,7 @@ const ProfileModal = ({ isOpen, onClose, userProfile, onUpdate, assets, transact
 
   // Animation du fond sombre
   const overlayAnimation = isClosing ? "animate-out fade-out duration-300" : "animate-in fade-in duration-300";
-  
+
   // On retire l'animation d'entrée de Tailwind pour l'axe Y pour éviter le conflit avec notre transformation manuelle
   const modalAnimation = "md:animate-in md:zoom-in-95 duration-300";
 
@@ -454,27 +458,27 @@ const ProfileModal = ({ isOpen, onClose, userProfile, onUpdate, assets, transact
     transitionStyle = "none"; // Mouvement collé au doigt, sans latence
   } else if (isClosing) {
     // La fermeture reste à 0.3s (doit TOUJOURS correspondre au setTimeout(..., 300) de handleClose)
-    transitionStyle = "transform 0.4s ease-in, opacity 0.4s ease-out"; 
+    transitionStyle = "transform 0.4s ease-in, opacity 0.4s ease-out";
   } else {
     // L'ouverture est allongée à 0.6s avec une courbe d'accélération plus douce
-    transitionStyle = "transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.9s ease-out"; 
+    transitionStyle = "transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.9s ease-out";
   }
 
   return (
-    <div 
-      className={`fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm ${overlayAnimation}`} 
+    <div
+      className={`fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm ${overlayAnimation}`}
       onMouseDown={handleClose}
     >
-      <div 
-        className={`bg-white rounded-t-3xl md:rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-lg border border-slate-100 max-h-[90vh] overflow-y-auto relative ${modalAnimation} ${isClosing ? 'opacity-0' : 'opacity-100'}`} 
+      <div
+        className={`bg-white rounded-t-3xl md:rounded-2xl shadow-2xl p-6 md:p-8 w-full max-w-lg border border-slate-100 max-h-[90vh] overflow-y-auto relative ${modalAnimation} ${isClosing ? 'opacity-0' : 'opacity-100'}`}
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ 
+        style={{
           transform: translateY !== "0px" ? `translateY(${translateY})` : undefined,
           transition: transitionStyle
         }}
       >
         {/* Zone de drag limitée à l'en-tête */}
-        <div 
+        <div
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -482,104 +486,109 @@ const ProfileModal = ({ isOpen, onClose, userProfile, onUpdate, assets, transact
         >
           <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 md:hidden"></div>
           <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2"><User size={24} className="text-blue-600"/> Mon Profil</h3>
-              <button type="button" onClick={handleClose} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full z-10 relative"><X size={20}/></button>
+            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2"><User size={24} className="text-blue-600" /> Mon Profil</h3>
+            <button type="button" onClick={handleClose} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-full z-10 relative"><X size={20} /></button>
           </div>
         </div>
 
         <form onSubmit={(e) => { e.preventDefault(); onUpdate(formData); handleClose(); }} className="space-y-5">
-            {/* IDENTITÉ */}
-            <div className="tour-profile-identity grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Prénom</label>
-                    <input type="text" name="firstName" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.firstName} onChange={handleChange} required />
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nom</label>
-                    <input type="text" name="lastName" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.lastName} onChange={handleChange} required />
-                </div>
+          {/* IDENTITÉ */}
+          <div className="tour-profile-identity grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Prénom</label>
+              <input type="text" name="firstName" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.firstName} onChange={handleChange} required />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Nom</label>
+              <input type="text" name="lastName" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.lastName} onChange={handleChange} required />
+            </div>
+          </div>
+
+          {/* DONNÉES FINANCIÈRES */}
+          <div className="tour-profile-financial border-t border-slate-100 pt-4">
+            <h4 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2"><Activity size={16} /> Données Financières</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Date de naissance</label>
+                <input type="date" name="birthDate" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.birthDate} onChange={handleChange} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Revenu Mensuel Net (€)</label>
+                <input type="number" name="monthlyIncome" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.monthlyIncome} onChange={handleChange} />
+              </div>
             </div>
 
-            {/* DONNÉES FINANCIÈRES */}
-            <div className="tour-profile-financial border-t border-slate-100 pt-4">
-                <h4 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2"><Activity size={16}/> Données Financières</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Date de naissance</label>
-                        <input type="date" name="birthDate" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.birthDate} onChange={handleChange} />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Revenu Mensuel Net (€)</label>
-                        <input type="number" name="monthlyIncome" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none" value={formData.monthlyIncome} onChange={handleChange} />
-                    </div>
-                </div>
-                
-                <div className="mb-4">
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Objectif Principal</label>
-                    <div className="space-y-1">
-                      <select name="financialGoal" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none bg-white font-medium" value={formData.financialGoal} onChange={handleChange}>
-                          <option value="freedom">Liberté Financière</option>
-                          <option value="retirement">Préparer ma Retraite</option>
-                          <option value="real_estate">Projet Immobilier</option>
-                          <option value="safety">Sécurité Financière</option>
-                          <option value="growth">Croissance du Capital</option>
-                          <option value="other">Autre</option>
-                      </select>
-                      <p className="text-[10px] text-slate-500 italic px-1">
-                        {formData.financialGoal === 'freedom' && "L'IA priorisera la génération de revenus passifs."}
-                        {formData.financialGoal === 'retirement' && "L'IA favorisera une projection sur le long terme."}
-                        {formData.financialGoal === 'real_estate' && "L'IA surveillera votre apport et la liquidité de vos fonds."}
-                        {formData.financialGoal === 'safety' && "L'IA vous alertera si votre épargne de secours est trop faible."}
-                        {formData.financialGoal === 'growth' && "L'IA vous aidera à faire fructifier vos actifs."}
-                      </p>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Profil de Risque</label>
-                    <div className="space-y-1">
-                      <select name="riskProfile" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none bg-white font-medium" value={formData.riskProfile} onChange={handleChange}>
-                          <option value="prudent">Prudent </option>
-                          <option value="balanced">Équilibré </option>
-                          <option value="dynamic">Dynamique </option>
-                      </select>
-                      <p className="text-[10px] text-slate-500 italic px-1">
-                        {formData.riskProfile === 'prudent' && "Priorité à la sécurité. Perte tolérée : 0% à -2%."}
-                        {formData.riskProfile === 'balanced' && "Mix entre livrets et bourse. Perte tolérée : -5% à -10%."}
-                        {formData.riskProfile === 'dynamic' && "Majorité en actions/crypto. Perte tolérée : -20% ou plus."}
-                      </p>
-                    </div>
-                </div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Objectif Principal</label>
+              <div className="space-y-1">
+                <select name="financialGoal" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none bg-white font-medium" value={formData.financialGoal} onChange={handleChange}>
+                  <option value="freedom">Liberté Financière</option>
+                  <option value="retirement">Préparer ma Retraite</option>
+                  <option value="real_estate">Projet Immobilier</option>
+                  <option value="safety">Sécurité Financière</option>
+                  <option value="growth">Croissance du Capital</option>
+                  <option value="other">Autre</option>
+                </select>
+                <p className="text-[10px] text-slate-500 italic px-1">
+                  {formData.financialGoal === 'freedom' && "L'IA priorisera la génération de revenus passifs."}
+                  {formData.financialGoal === 'retirement' && "L'IA favorisera une projection sur le long terme."}
+                  {formData.financialGoal === 'real_estate' && "L'IA surveillera votre apport et la liquidité de vos fonds."}
+                  {formData.financialGoal === 'safety' && "L'IA vous alertera si votre épargne de secours est trop faible."}
+                  {formData.financialGoal === 'growth' && "L'IA vous aidera à faire fructifier vos actifs."}
+                </p>
+              </div>
             </div>
 
-            {/* SÉCURITÉ & BACKUP */}
-            <div className="tour-profile-security border-t border-slate-100 pt-4">
-                <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2"><ShieldCheck size={18} className="text-green-600"/> Sécurité & Sauvegarde</h4>
-                
-                <div className="flex items-start gap-3 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <input type="checkbox" id="emailReports" name="emailReports" checked={formData.emailReports} onChange={handleChange} className="mt-1 w-4 h-4 text-blue-600 rounded" />
-                    <label htmlFor="emailReports" className="text-[11px] text-blue-900 font-medium leading-tight">
-                        Recevoir un rapport d'analyse mensuel (inclut une sauvegarde automatique de vos données).
-                    </label>
-                </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Profil de Risque</label>
+              <div className="space-y-1">
+                <select name="riskProfile" className="w-full p-2.5 rounded-lg border border-slate-300 outline-none bg-white font-medium" value={formData.riskProfile} onChange={handleChange}>
+                  <option value="prudent">Prudent </option>
+                  <option value="balanced">Équilibré </option>
+                  <option value="dynamic">Dynamique </option>
+                </select>
+                <p className="text-[10px] text-slate-500 italic px-1">
+                  {formData.riskProfile === 'prudent' && "Priorité à la sécurité. Perte tolérée : 0% à -2%."}
+                  {formData.riskProfile === 'balanced' && "Mix entre livrets et bourse. Perte tolérée : -5% à -10%."}
+                  {formData.riskProfile === 'dynamic' && "Majorité en actions/crypto. Perte tolérée : -20% ou plus."}
+                </p>
+              </div>
+            </div>
+          </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                    <button type="button" onClick={handleExport} className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all group">
-                        <Save size={20} className="text-blue-500 group-hover:scale-110 transition-transform mb-1"/>
-                        <span className="text-[10px] font-bold uppercase text-blue-600">Exporter Sauvegarde</span>
-                    </button>
-                    <button type="button" onClick={() => fileInputRef.current.click()} className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
-                        <Cloud size={20} className="text-slate-400 group-hover:text-indigo-600 mb-1"/>
-                        <span className="text-[10px] font-bold uppercase text-slate-500">Importer Sauvegarde</span>
-                    </button>
-                    <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileChange} />
-                </div>
+          {/* SYNCHRONISATION BANCAIRE */}
+          <div className="border-t border-slate-100 pt-4">
+            <GoCardlessSetup userId={user?.uid} />
+          </div>
+
+          {/* SÉCURITÉ & BACKUP */}
+          <div className="tour-profile-security border-t border-slate-100 pt-4">
+            <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2"><ShieldCheck size={18} className="text-green-600" /> Sécurité & Sauvegarde</h4>
+
+            <div className="flex items-start gap-3 mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+              <input type="checkbox" id="emailReports" name="emailReports" checked={formData.emailReports} onChange={handleChange} className="mt-1 w-4 h-4 text-blue-600 rounded" />
+              <label htmlFor="emailReports" className="text-[11px] text-blue-900 font-medium leading-tight">
+                Recevoir un rapport d'analyse mensuel (inclut une sauvegarde automatique de vos données).
+              </label>
             </div>
 
-            <div className="flex gap-3 justify-end mt-4 border-t border-slate-100 pt-4">
-              <Button variant="secondary" onClick={handleClose} type="button">Annuler</Button>
-              <Button type="submit" disabled={loading}>Enregistrer</Button>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={handleExport} className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all group">
+                <Save size={20} className="text-blue-500 group-hover:scale-110 transition-transform mb-1" />
+                <span className="text-[10px] font-bold uppercase text-blue-600">Exporter Sauvegarde</span>
+              </button>
+              <button type="button" onClick={() => fileInputRef.current.click()} className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all group">
+                <Cloud size={20} className="text-slate-400 group-hover:text-indigo-600 mb-1" />
+                <span className="text-[10px] font-bold uppercase text-slate-500">Importer Sauvegarde</span>
+              </button>
+              <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileChange} />
             </div>
+          </div>
+
+          <div className="flex gap-3 justify-end mt-4 border-t border-slate-100 pt-4">
+            <Button variant="secondary" onClick={handleClose} type="button">Annuler</Button>
+            <Button type="submit" disabled={loading}>Enregistrer</Button>
+          </div>
         </form>
       </div>
     </div>
@@ -598,8 +607,8 @@ const InactivityModal = ({ isOpen, onStayConnected }) => {
         <p className="text-slate-600 mb-6">
           Pour votre sécurité, vous serez déconnecté automatiquement dans moins de 5 minutes en raison d'inactivité.
         </p>
-        <button 
-          onClick={onStayConnected} 
+        <button
+          onClick={onStayConnected}
           className="w-full px-6 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-bold transition-all shadow-lg hover:shadow-indigo-200"
         >
           Rester connecté
@@ -615,7 +624,7 @@ const Card = ({ children, className = "" }) => (
   </div>
 );
 
-const Button = ({ onClick, children, variant = "primary", className = "", disabled = false, type="button" }) => {
+const Button = ({ onClick, children, variant = "primary", className = "", disabled = false, type = "button" }) => {
   const baseStyle = "px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 justify-center";
   const variants = {
     primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
@@ -652,10 +661,10 @@ const SparklineCard = ({ title, value, data, dataKey, color, icon: Icon, percent
         </div>
         {percentage && hasData && (
           <div className="mt-2 flex items-center">
-             <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${parseFloat(percentage) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {parseFloat(percentage) >= 0 ? '+' : ''}{percentage}%
-             </span>
-             <span className="text-[10px] text-slate-400 ml-2 hidden sm:inline">vs fin mois dernier</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${parseFloat(percentage) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {parseFloat(percentage) >= 0 ? '+' : ''}{percentage}%
+            </span>
+            <span className="text-[10px] text-slate-400 ml-2 hidden sm:inline">vs fin mois dernier</span>
           </div>
         )}
       </div>
@@ -667,15 +676,15 @@ const SparklineCard = ({ title, value, data, dataKey, color, icon: Icon, percent
             <AreaChart data={data}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.6}/>
-                  <stop offset="100%" stopColor={color} stopOpacity={0}/>
+                  <stop offset="0%" stopColor={color} stopOpacity={0.6} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area 
-                type="monotone" 
-                dataKey={dataKey} 
-                stroke={color} 
-                strokeWidth={2} 
+              <Area
+                type="monotone"
+                dataKey={dataKey}
+                stroke={color}
+                strokeWidth={2}
                 fill={`url(#${gradientId})`} // Utilisation de l'ID nettoyé
                 isAnimationActive={true}
               />
@@ -693,15 +702,15 @@ const SparklineCard = ({ title, value, data, dataKey, color, icon: Icon, percent
 
 const MessageBubble = ({ message }) => {
   const isUser = message.role === 'user';
-  
+
   const parseContent = (text) => {
     // Sécurité : si le texte est vide ou null
     if (!text) return "";
     if (isUser) return text;
-    
+
     // On utilise la fonction de nettoyage définie plus haut
     const cleanText = formatAiResponse(text);
-    
+
     return cleanText.split('\n').map((line, index) => {
       let content = line;
       let isHeader2 = line.startsWith('## ');
@@ -710,7 +719,7 @@ const MessageBubble = ({ message }) => {
 
       if (isHeader2) content = line.replace('## ', '');
       if (isHeader3) content = line.replace('### ', '');
-      
+
       // Amélioration de la détection des listes (gère les espaces au début)
       const listMatch = line.match(/^(\s*)[-*]\s(.*)/);
       let indentLevel = 0;
@@ -765,35 +774,35 @@ const InteractiveBudgetChart = ({ cashflowData, transactions, hasFlowData, onMon
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [activeIndex, setActiveIndex] = useState(-1);
 
-// Gère le clic sur une barre (Mois)
-const handleExpenseBarClick = (data) => {
-  if (data && data.payload) {
-    const monthKey = data.payload.rawDate;
-    setSelectedMonth(data.payload);
-    setActiveIndex(-1); // On réinitialise la catégorie
-    if (onMonthSelect) onMonthSelect(monthKey);
+  // Gère le clic sur une barre (Mois)
+  const handleExpenseBarClick = (data) => {
+    if (data && data.payload) {
+      const monthKey = data.payload.rawDate;
+      setSelectedMonth(data.payload);
+      setActiveIndex(-1); // On réinitialise la catégorie
+      if (onMonthSelect) onMonthSelect(monthKey);
+      if (onCategorySelect) onCategorySelect(null);
+    }
+  };
+
+  // Gère le clic sur une part du camembert (Catégorie + Dé-sélection)
+  const handlePieClick = (data, index) => {
+    const isDeselecting = activeIndex === index;
+    const newIndex = isDeselecting ? -1 : index;
+    setActiveIndex(newIndex);
+
+    if (onCategorySelect) {
+      onCategorySelect(isDeselecting ? null : data.name);
+    }
+  };
+
+  // Gère le bouton retour (Reset total)
+  const handleBack = () => {
+    setSelectedMonth(null);
+    setActiveIndex(-1);
+    if (onMonthSelect) onMonthSelect(null);
     if (onCategorySelect) onCategorySelect(null);
-  }
-};
-
-// Gère le clic sur une part du camembert (Catégorie + Dé-sélection)
-const handlePieClick = (data, index) => {
-  const isDeselecting = activeIndex === index;
-  const newIndex = isDeselecting ? -1 : index;
-  setActiveIndex(newIndex);
-  
-  if (onCategorySelect) {
-    onCategorySelect(isDeselecting ? null : data.name);
-  }
-};
-
-// Gère le bouton retour (Reset total)
-const handleBack = () => {
-  setSelectedMonth(null);
-  setActiveIndex(-1);
-  if (onMonthSelect) onMonthSelect(null);
-  if (onCategorySelect) onCategorySelect(null);
-};
+  };
 
   const onPieEnter = useCallback((_, index) => setActiveIndex(index), []);
   const onPieLeave = useCallback(() => setActiveIndex(-1), []);
@@ -801,7 +810,7 @@ const handleBack = () => {
   const pieData = useMemo(() => {
     if (!selectedMonth || !transactions) return [];
     const monthKey = selectedMonth.rawDate;
-    const monthTransactions = transactions.filter(t => 
+    const monthTransactions = transactions.filter(t =>
       t.date.startsWith(monthKey) && t.type === 'expense'
     );
     const categoryTotals = {};
@@ -809,14 +818,14 @@ const handleBack = () => {
       const cat = t.category || 'Autre';
       categoryTotals[cat] = (categoryTotals[cat] || 0) + t.amount;
     });
-    return Object.keys(categoryTotals).map(cat => ({ name: cat, value: categoryTotals[cat] })).sort((a,b) => b.value - a.value);
+    return Object.keys(categoryTotals).map(cat => ({ name: cat, value: categoryTotals[cat] })).sort((a, b) => b.value - a.value);
   }, [selectedMonth, transactions]);
 
   const totalExpenses = useMemo(() => pieData.reduce((sum, item) => sum + item.value, 0), [pieData]);
   const activeItem = activeIndex !== -1 ? pieData[activeIndex] : null;
   const centerLabel = activeItem ? activeItem.name : "Dépensé";
   const centerValue = activeItem ? activeItem.value : totalExpenses;
-  const centerColor = activeItem && EXPENSE_CATEGORIES[activeItem.name] ? EXPENSE_CATEGORIES[activeItem.name].color : '#1e293b'; 
+  const centerColor = activeItem && EXPENSE_CATEGORIES[activeItem.name] ? EXPENSE_CATEGORIES[activeItem.name].color : '#1e293b';
   const centerSubLabel = activeItem ? `${((activeItem.value / totalExpenses) * 100).toFixed(1)}%` : "Total";
 
   const renderCustomizedLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, payload }) => {
@@ -830,7 +839,7 @@ const handleBack = () => {
       <g pointerEvents="none">
         <foreignObject x={x - 12} y={y - 12} width={24} height={24}>
           <div className="flex items-center justify-center w-full h-full text-white drop-shadow-md">
-             <CategoryIcon size={16} strokeWidth={2.5} />
+            <CategoryIcon size={16} strokeWidth={2.5} />
           </div>
         </foreignObject>
       </g>
@@ -846,100 +855,100 @@ const handleBack = () => {
       )}
       {selectedMonth ? (
         <div className="h-full w-full flex flex-col animate-in fade-in zoom-in-95 duration-200">
-           <div className="flex justify-between items-center mb-1 px-2">
-             <div className="flex items-center gap-2">
-                <button onClick={handleBack} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-500 transition-colors" title="Retour au graphique global">
-                  <ChevronLeft size={24}/>
-                </button>
-                <div>
-                    <h4 className="font-bold text-slate-800 text-lg leading-tight">{selectedMonth.month} {selectedMonth.rawDate?.split('-')[0]}</h4>
-                    <p className="text-xs text-slate-500">Détail des dépenses</p>
-                </div>
-             </div>
-           </div>
-           <div className="flex-1 relative min-h-[260px]">
+          <div className="flex justify-between items-center mb-1 px-2">
+            <div className="flex items-center gap-2">
+              <button onClick={handleBack} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-500 transition-colors" title="Retour au graphique global">
+                <ChevronLeft size={24} />
+              </button>
+              <div>
+                <h4 className="font-bold text-slate-800 text-lg leading-tight">{selectedMonth.month} {selectedMonth.rawDate?.split('-')[0]}</h4>
+                <p className="text-xs text-slate-500">Détail des dépenses</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex-1 relative min-h-[260px]">
             {pieData.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-400 text-sm">Aucune dépense ce mois-ci</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                  <Pie 
-                    data={pieData} 
-                    cx="50%" 
-                    cy="50%" 
-                    innerRadius={70} 
-                    outerRadius={105} 
-                    paddingAngle={4} 
-                    dataKey="value" 
-                    label={renderCustomizedLabel} 
-                    labelLine={false} 
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={105}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={renderCustomizedLabel}
+                    labelLine={false}
                     animationDuration={800}
                   >
                     {pieData.map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={EXPENSE_CATEGORIES[entry.name]?.color || EXPENSE_CATEGORIES['Autre'].color} 
-                          stroke="none"
-                          onClick={() => handlePieClick(entry, index)} // Ajout du clic
-                          className="cursor-pointer"
-                          opacity={activeIndex === -1 || activeIndex === index ? 1 : 0.3} 
-                          style={{ transition: 'opacity 0.2s ease', outline: 'none' }}
-                        />
-                      ))}
-                    </Pie>
-                 </PieChart>
-               </ResponsiveContainer>
-             )}
-             {pieData.length > 0 && (
-               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0" style={{top: '0'}}>
-                 <span className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-1">{centerSubLabel}</span>
-                 <span className="text-3xl font-extrabold transition-colors duration-200" style={{ color: centerColor }}>{formatCurrency(centerValue)}</span>
-                 <span className="text-sm font-bold text-slate-600 mt-1 px-3 py-1 rounded-full bg-slate-50 border border-slate-100 shadow-sm">{centerLabel}</span>
-               </div>
-             )}
-           </div>
-           <div className="mt-4 flex flex-wrap justify-center gap-2 px-2 overflow-y-auto max-h-24 no-scrollbar">
-                  {pieData.map((entry, index) => {
-                      const CatIcon = EXPENSE_CATEGORIES[entry.name]?.icon || Circle;
-                      const color = EXPENSE_CATEGORIES[entry.name]?.color || '#94a3b8';
-                      const isSelected = activeIndex === index;
-                      return (
-                        <div 
-                          key={entry.name} 
-                          onClick={() => handlePieClick(entry, index)} // Ajout du clic pour filtrer
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all cursor-pointer flex-shrink-0 ${isSelected ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-100 scale-105' : 'bg-white border-slate-100'}`}
-                        >
-                        <div className="p-1 rounded-full" style={{ backgroundColor: color + '20', color: color }}><CatIcon size={10} /></div>
-                        <span className="text-[10px] font-semibold text-slate-700">{entry.name}</span>
-                        <span className="text-[10px] text-slate-500">{totalExpenses > 0 ? Math.round((entry.value / totalExpenses) * 100) : 0}%</span>
-                    </div>
-                  );
-              })}
-           </div>
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={EXPENSE_CATEGORIES[entry.name]?.color || EXPENSE_CATEGORIES['Autre'].color}
+                        stroke="none"
+                        onClick={() => handlePieClick(entry, index)} // Ajout du clic
+                        className="cursor-pointer"
+                        opacity={activeIndex === -1 || activeIndex === index ? 1 : 0.3}
+                        style={{ transition: 'opacity 0.2s ease', outline: 'none' }}
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+            {pieData.length > 0 && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0" style={{ top: '0' }}>
+                <span className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-1">{centerSubLabel}</span>
+                <span className="text-3xl font-extrabold transition-colors duration-200" style={{ color: centerColor }}>{formatCurrency(centerValue)}</span>
+                <span className="text-sm font-bold text-slate-600 mt-1 px-3 py-1 rounded-full bg-slate-50 border border-slate-100 shadow-sm">{centerLabel}</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap justify-center gap-2 px-2 overflow-y-auto max-h-24 no-scrollbar">
+            {pieData.map((entry, index) => {
+              const CatIcon = EXPENSE_CATEGORIES[entry.name]?.icon || Circle;
+              const color = EXPENSE_CATEGORIES[entry.name]?.color || '#94a3b8';
+              const isSelected = activeIndex === index;
+              return (
+                <div
+                  key={entry.name}
+                  onClick={() => handlePieClick(entry, index)} // Ajout du clic pour filtrer
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all cursor-pointer flex-shrink-0 ${isSelected ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-100 scale-105' : 'bg-white border-slate-100'}`}
+                >
+                  <div className="p-1 rounded-full" style={{ backgroundColor: color + '20', color: color }}><CatIcon size={10} /></div>
+                  <span className="text-[10px] font-semibold text-slate-700">{entry.name}</span>
+                  <span className="text-[10px] text-slate-500">{totalExpenses > 0 ? Math.round((entry.value / totalExpenses) * 100) : 0}%</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={cashflowData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
-            <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-            <RechartsTooltip 
-              cursor={{fill: '#f1f5f9'}} 
-              contentStyle={{ 
-                borderRadius: '12px', 
-                border: 'none', 
+            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+            <RechartsTooltip
+              cursor={{ fill: '#f1f5f9' }}
+              contentStyle={{
+                borderRadius: '12px',
+                border: 'none',
                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
                 backgroundColor: 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(4px)',
                 padding: '8px 12px',
                 fontSize: '12px'
-              }} 
+              }}
               offset={25}
               allowEscapeViewBox={{ x: false, y: true }}
-              formatter={(value) => formatCurrency(value)} 
-              wrapperStyle={{ pointerEvents: 'none' }} 
+              formatter={(value) => formatCurrency(value)}
+              wrapperStyle={{ pointerEvents: 'none' }}
             />
-            <Bar dataKey="revenus" name="Revenus" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={16} className="cursor-pointer hover:opacity-80 transition-opacity" onClick={handleExpenseBarClick}/>
+            <Bar dataKey="revenus" name="Revenus" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={16} className="cursor-pointer hover:opacity-80 transition-opacity" onClick={handleExpenseBarClick} />
             <Bar dataKey="depenses" name="Dépenses" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={16} className="cursor-pointer hover:opacity-80 transition-opacity" onClick={handleExpenseBarClick} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -953,8 +962,8 @@ const handleBack = () => {
 
 const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   const isComposite = ['investissement', 'crypto', 'immobilier', 'autre', 'epargne_salariale'].includes(asset.type);
-  const [activeTab, setActiveTab] = useState(isComposite ? 'composition' : 'history'); 
-  const [viewMode, setViewMode] = useState('asset'); 
+  const [activeTab, setActiveTab] = useState(isComposite ? 'composition' : 'history');
+  const [viewMode, setViewMode] = useState('asset');
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [newPosition, setNewPosition] = useState({ name: '', value: '' });
   const [newAssetHistoryPoint, setNewAssetHistoryPoint] = useState({ date: new Date().toISOString().split('T')[0], value: asset.value });
@@ -962,9 +971,9 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   const [newPosHistoryPoint, setNewPosHistoryPoint] = useState({ date: new Date().toISOString().split('T')[0], value: '' });
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [deleteConfig, setDeleteConfig] = useState(null); 
+  const [deleteConfig, setDeleteConfig] = useState(null);
   const [focusedPosId, setFocusedPosId] = useState(null);
-  const [movementConfig, setMovementConfig] = useState(null); 
+  const [movementConfig, setMovementConfig] = useState(null);
   const [movementData, setMovementData] = useState({ positionId: '', amount: '' });
   const [showPrimaryModal, setShowPrimaryModal] = useState(false);
 
@@ -975,7 +984,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   const [isEditingInstitution, setIsEditingInstitution] = useState(false);
   const [editedInstitution, setEditedInstitution] = useState(asset.institution || '');
   const [isEditingType, setIsEditingType] = useState(false);
-  
+
   // États pour l'édition du nom de la position
   const [isEditingPosName, setIsEditingPosName] = useState(false);
   const [editedPosName, setEditedPosName] = useState('');
@@ -988,8 +997,8 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   }, []);
 
   // Met à jour les états édités si l'actif change
-  useEffect(() => { 
-    setEditedName(asset.name); 
+  useEffect(() => {
+    setEditedName(asset.name);
     setEditedInstitution(asset.institution || '');
   }, [asset.name, asset.institution]);
 
@@ -1000,13 +1009,13 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   const handleSavePosName = () => {
     setIsEditingPosName(false);
     if (editedPosName.trim() && editedPosName !== selectedPosition.name) {
-       const updatedPositions = asset.positions.map(p =>
-          p.id === selectedPosition.id ? { ...p, name: editedPosName.trim() } : p
-       );
-       onUpdate({ ...asset, positions: updatedPositions });
-       setSelectedPosition({ ...selectedPosition, name: editedPosName.trim() });
+      const updatedPositions = asset.positions.map(p =>
+        p.id === selectedPosition.id ? { ...p, name: editedPosName.trim() } : p
+      );
+      onUpdate({ ...asset, positions: updatedPositions });
+      setSelectedPosition({ ...selectedPosition, name: editedPosName.trim() });
     } else {
-       setEditedPosName(selectedPosition.name);
+      setEditedPosName(selectedPosition.name);
     }
   };
 
@@ -1028,41 +1037,41 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   }, [onClose, isEditingName, isEditingInstitution, isEditingType, showIconPicker]);
 
   const handleSaveName = () => {
-     setIsEditingName(false);
-     if (editedName.trim() && editedName !== asset.name) {
-         onUpdate({ ...asset, name: editedName.trim() });
-     } else {
-         setEditedName(asset.name); // Annule si vide
-     }
+    setIsEditingName(false);
+    if (editedName.trim() && editedName !== asset.name) {
+      onUpdate({ ...asset, name: editedName.trim() });
+    } else {
+      setEditedName(asset.name); // Annule si vide
+    }
   };
 
   const handleSaveInstitution = () => {
-     setIsEditingInstitution(false);
-     if (editedInstitution.trim() !== asset.institution) {
-         onUpdate({ ...asset, institution: editedInstitution.trim() });
-     } else {
-         setEditedInstitution(asset.institution || '');
-     }
+    setIsEditingInstitution(false);
+    if (editedInstitution.trim() !== asset.institution) {
+      onUpdate({ ...asset, institution: editedInstitution.trim() });
+    } else {
+      setEditedInstitution(asset.institution || '');
+    }
   };
 
   const handleKeyDownName = (e) => {
-     if (e.key === 'Enter') handleSaveName();
-     if (e.key === 'Escape') { setIsEditingName(false); setEditedName(asset.name); }
+    if (e.key === 'Enter') handleSaveName();
+    if (e.key === 'Escape') { setIsEditingName(false); setEditedName(asset.name); }
   };
 
   const handleKeyDownInstitution = (e) => {
-     if (e.key === 'Enter') handleSaveInstitution();
-     if (e.key === 'Escape') { setIsEditingInstitution(false); setEditedInstitution(asset.institution || ''); }
+    if (e.key === 'Enter') handleSaveInstitution();
+    if (e.key === 'Escape') { setIsEditingInstitution(false); setEditedInstitution(asset.institution || ''); }
   };
 
   const handleIconChange = (iconKey) => {
-     onUpdate({ ...asset, icon: iconKey });
-     setShowIconPicker(false);
+    onUpdate({ ...asset, icon: iconKey });
+    setShowIconPicker(false);
   };
-  
+
   const handleTypeChange = (newType) => {
-     onUpdate({ ...asset, type: newType });
-     setIsEditingType(false);
+    onUpdate({ ...asset, type: newType });
+    setIsEditingType(false);
   };
 
   const handleExecuteMovement = (e) => {
@@ -1078,10 +1087,10 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
       if (p.isCash) {
         const delta = movementType === 'buy' ? -amount : amount;
         const newValue = parseFloat((p.value + delta).toFixed(2));
-        
+
         let updatedHistory = [...(p.history || [])];
         const existingIdx = updatedHistory.findIndex(h => h.date === today);
-        
+
         if (existingIdx >= 0) {
           updatedHistory[existingIdx] = { ...updatedHistory[existingIdx], value: newValue };
         } else {
@@ -1097,32 +1106,32 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
         const currentInvested = (typeof p.totalInvested === 'number') ? p.totalInvested : 0;
         const delta = movementType === 'buy' ? amount : -amount;
         const newValue = parseFloat((p.value + delta).toFixed(2));
-        
+
         // Nouveau calcul du PRU (Total Investi) pour éviter qu'il ne devienne négatif
         let newInvested = currentInvested;
         if (movementType === 'buy') {
-            newInvested += amount;
+          newInvested += amount;
         } else {
-            // En cas de vente, on réduit le PRU proportionnellement (ex: si je vends 50% de ma ligne, le PRU baisse de 50%)
-            // Sécurité : on évite la division par zéro au cas où la ligne vaudrait 0€
-            const ratio = p.value > 0 ? (amount / p.value) : 1;
-            newInvested = currentInvested - (currentInvested * ratio);
-            if (newInvested < 0) newInvested = 0; // Sécurité anti-négatif
+          // En cas de vente, on réduit le PRU proportionnellement (ex: si je vends 50% de ma ligne, le PRU baisse de 50%)
+          // Sécurité : on évite la division par zéro au cas où la ligne vaudrait 0€
+          const ratio = p.value > 0 ? (amount / p.value) : 1;
+          newInvested = currentInvested - (currentInvested * ratio);
+          if (newInvested < 0) newInvested = 0; // Sécurité anti-négatif
         }
-        
+
         // On ajoute TOUJOURS le nouveau point d'historique (avec un timestamp caché pour le différencier)
         let updatedHistory = [...(p.history || [])];
         const timestampMs = Date.now();
-        updatedHistory.push({ 
+        updatedHistory.push({
           id: timestampMs, // Permet de distinguer plusieurs actions le même jour
-          date: today, 
-          value: newValue, 
+          date: today,
+          value: newValue,
           movementTag: movementType,
           movementAmount: amount // On sauvegarde le montant de l'achat/vente
         });
 
-        return { 
-          ...p, 
+        return {
+          ...p,
           value: newValue,
           totalInvested: parseFloat(newInvested.toFixed(2)),
           history: updatedHistory
@@ -1140,9 +1149,9 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   const metrics = useMemo(() => {
     const cashPos = (asset.positions || []).find(p => p.isCash);
     const cashValue = cashPos ? cashPos.value : 0;
-    
+
     if (!isComposite) return { totalInvested: asset.value, plusValue: 0, plusValuePct: 0, cash: cashValue };
-    
+
     const supports = (asset.positions || []).filter(p => !p.isCash);
     const totalInvestedInSupports = supports.reduce((acc, pos) => acc + (pos.totalInvested || 0), 0);
     const currentSupportsValue = supports.reduce((acc, pos) => acc + pos.value, 0);
@@ -1159,7 +1168,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
   const unifiedHistory = useMemo(() => {
     if (!isComposite) return [];
     let events = [];
-    
+
     // 1. Transactions externes (Virements entrants/sortants)
     if (transactions) {
       transactions.forEach(t => {
@@ -1182,7 +1191,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
         });
       });
     }
-    
+
     // Tri chronologique décroissant
     return events.sort((a, b) => {
       const dateDiff = new Date(b.date) - new Date(a.date);
@@ -1203,14 +1212,14 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     (history || []).forEach(item => uniqueHistoryMap.set(item.date, item));
     const today = new Date().toISOString().split('T')[0];
     // On ajoute la valeur investie au point d'aujourd'hui
-    uniqueHistoryMap.set(today, { 
-      date: today, 
-      value: currentValue, 
-      investedValue: currentInvested 
+    uniqueHistoryMap.set(today, {
+      date: today,
+      value: currentValue,
+      investedValue: currentInvested
     });
     return Array.from(uniqueHistoryMap.values()).sort((a, b) => new Date(a.date) - new Date(b.date));
   };
-  
+
 
   const rebuildGlobalHistory = (currentPositions) => {
     const allDates = new Set();
@@ -1218,12 +1227,12 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     const sortedDates = Array.from(allDates).sort((a, b) => new Date(a) - new Date(b));
     return sortedDates.map(date => {
       const totalAtDate = currentPositions.reduce((sum, pos) => {
-        const sortedPosHistory = [...(pos.history || [])].sort((a,b) => new Date(a.date) - new Date(b.date));
+        const sortedPosHistory = [...(pos.history || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
         // On filtre pour trouver tous les points de ce jour précis
         const exactMatches = sortedPosHistory.filter(h => h.date === date);
         // S'il y en a plusieurs, on prend le tout dernier enregistré
         const exactMatch = exactMatches.length > 0 ? exactMatches[exactMatches.length - 1] : null;
-        
+
         if (exactMatch) return sum + exactMatch.value;
         const previousEntries = sortedPosHistory.filter(h => h.date < date);
         const lastEntry = previousEntries.length > 0 ? previousEntries[previousEntries.length - 1] : null;
@@ -1233,8 +1242,8 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     });
   };
 
-  const assetChartData = useMemo(() => 
-    getChartData(asset.history, asset.value, totalInvested), 
+  const assetChartData = useMemo(() =>
+    getChartData(asset.history, asset.value, totalInvested),
     [asset, totalInvested]
   );
 
@@ -1254,22 +1263,22 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     e.preventDefault();
     if (!newPosition.name) return;
     const today = new Date().toISOString().split('T')[0];
-    
+
     // Création d'un support vide (valeur 0) avec un PRU (totalInvested) à 0
-    const newPos = { 
-      id: Date.now(), 
-      name: newPosition.name, 
-      value: 0, 
-      totalInvested: 0, 
+    const newPos = {
+      id: Date.now(),
+      name: newPosition.name,
+      value: 0,
+      totalInvested: 0,
       // On lui donne un ID volontairement plus vieux de 1000ms pour qu'il reste en bas du tri
-      history: [{ id: Date.now() - 1000, date: today, value: 0, movementTag: 'creation' }] 
+      history: [{ id: Date.now() - 1000, date: today, value: 0, movementTag: 'creation' }]
     };
 
     const updatedPositions = [...(asset.positions || []), newPos];
     // La valorisation totale du PEA inclut désormais ce nouveau support (à 0€) + le Cash
     const newTotal = updatedPositions.reduce((acc, p) => acc + p.value, 0);
     const newAssetHistory = rebuildGlobalHistory(updatedPositions);
-    
+
     onUpdate({ ...asset, positions: updatedPositions, value: newTotal, history: newAssetHistory });
     setNewPosition({ name: '', value: '' });
   };
@@ -1290,7 +1299,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
         if (p.isCash) {
           const refundAmount = posToDelete.value;
           const newValue = parseFloat((p.value + refundAmount).toFixed(2));
-          
+
           let updatedHistory = [...(p.history || [])];
           const existingIdx = updatedHistory.findIndex(h => h.date === today);
           if (existingIdx >= 0) {
@@ -1299,7 +1308,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
             updatedHistory.push({ date: today, value: newValue });
           }
           updatedHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
-          
+
           return { ...p, value: newValue, history: updatedHistory };
         }
         return p;
@@ -1311,7 +1320,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     onUpdate({ ...asset, positions: updatedPositions, value: newTotal, history: newAssetHistory });
   };
 
-    const handleAddAssetHistory = (e) => {
+  const handleAddAssetHistory = (e) => {
     e.preventDefault();
     if (!newAssetHistoryPoint.date || !newAssetHistoryPoint.value) return;
     const newValue = Math.round(parseFloat(newAssetHistoryPoint.value) * 100) / 100;
@@ -1323,7 +1332,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     const latestPastEntry = [...updatedHistory].reverse().find(h => h.date <= today);
     const newCurrentValue = latestPastEntry ? latestPastEntry.value : asset.value;
     onUpdate({ ...asset, history: updatedHistory, value: newCurrentValue });
-    setNewAssetHistoryPoint({ ...newAssetHistoryPoint, value: '' }); 
+    setNewAssetHistoryPoint({ ...newAssetHistoryPoint, value: '' });
   };
 
   const handleDeleteAssetHistory = (idx) => {
@@ -1342,9 +1351,9 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     if (!newPosHistoryPoint.date || !newPosHistoryPoint.value) return;
     const newValue = parseFloat(newPosHistoryPoint.value);
     const date = newPosHistoryPoint.date;
-    
+
     let updatedHistory = [...(selectedPosition.history || [])];
-    
+
     // Calcul de la variation (delta) par rapport à la dernière valeur connue
     const sortedForPrev = [...updatedHistory].sort((a, b) => {
       const dateDiff = new Date(a.date) - new Date(b.date);
@@ -1355,20 +1364,20 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     const previousValue = previousEntry ? previousEntry.value : 0;
     const delta = newValue - previousValue;
 
-    updatedHistory.push({ 
-      id: Date.now(), 
-      date: date, 
+    updatedHistory.push({
+      id: Date.now(),
+      date: date,
       value: newValue,
       movementTag: 'evolution',
       movementAmount: delta
     });
-    
+
     updatedHistory.sort((a, b) => {
       const dateDiff = new Date(a.date) - new Date(b.date);
       if (dateDiff === 0 && a.id && b.id) return a.id - b.id;
       return dateDiff;
     });
-    
+
     const today = new Date().toISOString().split('T')[0];
     const latestPastEntry = [...updatedHistory].reverse().find(h => h.date <= today);
     const newPosValue = latestPastEntry ? latestPastEntry.value : selectedPosition.value;
@@ -1396,11 +1405,11 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
       if (dateDiff === 0 && b.id && a.id) return b.id - a.id;
       return dateDiff;
     });
-    
+
     // 2. On cible le bon élément et on le retire
     const itemToDelete = sortedHistory[idx];
     const updatedHistory = selectedPosition.history.filter(h => h !== itemToDelete);
-    
+
     // 3. On retrie correctement l'historique mis à jour en ordre ascendant (chronologique)
     updatedHistory.sort((a, b) => {
       const dateDiff = new Date(a.date) - new Date(b.date);
@@ -1424,38 +1433,38 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
       }
     });
     if (newTotalInvested < 0) newTotalInvested = 0;
-    
+
     const today = new Date().toISOString().split('T')[0];
     const latestPastEntry = [...updatedHistory].reverse().find(h => h.date <= today);
     const newPosValue = latestPastEntry ? latestPastEntry.value : (updatedHistory.length === 0 ? 0 : selectedPosition.value);
-    
+
     // 5. Mise à jour de la position ET annulation du mouvement sur la poche Cash
     const updatedPositions = asset.positions.map(p => {
       if (p.id === selectedPosition.id) {
         return { ...p, history: updatedHistory, value: newPosValue, totalInvested: parseFloat(newTotalInvested.toFixed(2)) };
       }
-      
+
       // Restitution/Débit sur la poche espèces si c'était un achat/vente
       if (p.isCash && (itemToDelete.movementTag === 'buy' || itemToDelete.movementTag === 'sell') && itemToDelete.movementAmount) {
         // Annuler un Achat = Recréditer le cash (+). Annuler une Vente = Redébiter le cash (-)
         const delta = itemToDelete.movementTag === 'buy' ? itemToDelete.movementAmount : -itemToDelete.movementAmount;
-        
+
         // On propage la correction sur tout l'historique du Cash à partir de la date du mouvement annulé
         let updatedCashHistory = (p.history || []).map(h => {
-           if (h.date >= itemToDelete.date) {
-               return { ...h, value: parseFloat((h.value + delta).toFixed(2)) };
-           }
-           return h;
+          if (h.date >= itemToDelete.date) {
+            return { ...h, value: parseFloat((h.value + delta).toFixed(2)) };
+          }
+          return h;
         });
-        
+
         const latestCash = [...updatedCashHistory].sort((a, b) => a.date.localeCompare(b.date)).reverse().find(h => h.date <= today);
         const currentCashValue = latestCash ? latestCash.value : parseFloat((p.value + delta).toFixed(2));
-        
+
         return { ...p, value: currentCashValue, history: updatedCashHistory };
       }
       return p;
     });
-    
+
     const newAssetTotal = updatedPositions.reduce((sum, p) => sum + p.value, 0);
     const newAssetHistory = rebuildGlobalHistory(updatedPositions);
     onUpdate({ ...asset, positions: updatedPositions, value: newAssetTotal, history: newAssetHistory });
@@ -1474,614 +1483,613 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
     setIsAnalyzing(true);
     const context = `Analyse l'actif: ${asset.name} (${asset.type}). Markdown.`;
     try {
-        const result = await callGeminiAPI("Expert Bourse. Utilise ## pour les titres, - pour les listes, et <b> pour mettre en gras les mots importants. Interdiction d'utiliser les caractères * ou **.", [], context);
-        setAiAnalysis(result);
+      const result = await callGeminiAPI("Expert Bourse. Utilise ## pour les titres, - pour les listes, et <b> pour mettre en gras les mots importants. Interdiction d'utiliser les caractères * ou **.", [], context);
+      setAiAnalysis(result);
     } catch (e) { setAiAnalysis("Erreur."); }
     setIsAnalyzing(false);
   };
 
-return (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 text-slate-900" onMouseDown={onClose}>
-    {/* Modale standard pour les suppressions */}
-    <ConfirmationModal 
-      isOpen={!!deleteConfig} 
-      onClose={() => setDeleteConfig(null)} 
-      onConfirm={executeDelete} 
-    />
-    
-    {/* NOUVELLE Modale Bespoke pour le Compte Principal (Design Coordonné, pas de rouge) */}
-    {showPrimaryModal && (
-      <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" onMouseDown={(e) => { e.stopPropagation(); setShowPrimaryModal(false); }}>
-        {/* On peut remettre un backdrop ici ou gérer z-index de la fenêtre de detail */}
-        <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"></div>
-        
-        <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm animate-in slide-in-from-bottom-1/2 md:slide-in-from-bottom-0 md:zoom-in-95 duration-300 flex flex-col items-center text-center relative z-10 pb-8 md:pb-8" onMouseDown={e => e.stopPropagation()}>
-          {/* Petite barre de drag (visuelle) pour mobile */}
-          <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 md:hidden"></div>
-          
-          {/* Icône Appropriée : Grosse Étoile Amber */}
-          <div className="p-4 bg-amber-50 rounded-full text-amber-400 mb-6 shadow-inner border border-amber-100">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          </div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200 text-slate-900" onMouseDown={onClose}>
+      {/* Modale standard pour les suppressions */}
+      <ConfirmationModal
+        isOpen={!!deleteConfig}
+        onClose={() => setDeleteConfig(null)}
+        onConfirm={executeDelete}
+      />
 
-          <h2 className="text-2xl font-bold text-slate-900 mb-3">Compte principal</h2>
-          <p className="text-sm text-slate-600 mb-8 leading-relaxed">Voulez-vous définir <span className="font-semibold text-slate-800">{asset.name}</span> comme compte principal de paiement ?<br/><br/>Il sera sélectionné par défaut lors de vos ajouts de dépenses rapides (Saisie IA).</p>
-          
-          <div className="flex gap-4 w-full">
-            <button 
-              onClick={() => setShowPrimaryModal(false)}
-              className="flex-1 py-3.5 px-6 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors"
-            >
-              Annuler
-            </button>
-            <button 
-              onClick={() => {
-                onUpdate({ ...asset, isPrimary: true });
-                setShowPrimaryModal(false);
-              }}
-              className="flex-1 py-3.5 px-6 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white font-bold transition-colors shadow-sm"
-            >
-              Confirmer
-            </button>
+      {/* NOUVELLE Modale Bespoke pour le Compte Principal (Design Coordonné, pas de rouge) */}
+      {showPrimaryModal && (
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" onMouseDown={(e) => { e.stopPropagation(); setShowPrimaryModal(false); }}>
+          {/* On peut remettre un backdrop ici ou gérer z-index de la fenêtre de detail */}
+          <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"></div>
+
+          <div className="bg-white rounded-t-3xl md:rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm animate-in slide-in-from-bottom-1/2 md:slide-in-from-bottom-0 md:zoom-in-95 duration-300 flex flex-col items-center text-center relative z-10 pb-8 md:pb-8" onMouseDown={e => e.stopPropagation()}>
+            {/* Petite barre de drag (visuelle) pour mobile */}
+            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 md:hidden"></div>
+
+            {/* Icône Appropriée : Grosse Étoile Amber */}
+            <div className="p-4 bg-amber-50 rounded-full text-amber-400 mb-6 shadow-inner border border-amber-100">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            </div>
+
+            <h2 className="text-2xl font-bold text-slate-900 mb-3">Compte principal</h2>
+            <p className="text-sm text-slate-600 mb-8 leading-relaxed">Voulez-vous définir <span className="font-semibold text-slate-800">{asset.name}</span> comme compte principal de paiement ?<br /><br />Il sera sélectionné par défaut lors de vos ajouts de dépenses rapides (Saisie IA).</p>
+
+            <div className="flex gap-4 w-full">
+              <button
+                onClick={() => setShowPrimaryModal(false)}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  onUpdate({ ...asset, isPrimary: true });
+                  setShowPrimaryModal(false);
+                }}
+                className="flex-1 py-3.5 px-6 rounded-2xl bg-amber-400 hover:bg-amber-500 text-white font-bold transition-colors shadow-sm"
+              >
+                Confirmer
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-    
-    <div className="bg-white md:rounded-2xl shadow-2xl w-full max-w-4xl h-full md:h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 relative z-10" onMouseDown={(e) => e.stopPropagation()}>
-      
-      {/* --- VUE DÉTAIL DE L'ACTIF --- */}
-      {viewMode === 'asset' && (
-        <>
-          {/* EN-TÊTE */}
-          <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
-            <div>
-              <button onClick={onClose} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-2 text-sm font-medium">
-                <ChevronLeft size={16} /> Retour
-              </button>
-              
-              <div className="flex items-center gap-3 relative z-50">
-                {/* SELECTEUR D'ICÔNE */}
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowIconPicker(!showIconPicker)} 
-                    className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center text-blue-600 cursor-pointer"
-                    title="Changer l'icône"
-                  >
-                    {(() => {
-                      const IconComp = (ASSET_ICON_OPTIONS[asset.icon] || ASSET_ICON_OPTIONS['building']).icon;
-                      return <IconComp size={24} />;
-                    })()}
-                  </button>
-                  {showIconPicker && (
-                    <>
-                      {/* Overlay invisible pour fermer le menu en cliquant à côté */}
-                      <div className="fixed inset-0 z-40" onClick={() => setShowIconPicker(false)}></div>
-                      <div className="absolute top-full left-0 mt-2 p-2 bg-white rounded-xl shadow-xl border border-slate-200 grid grid-cols-4 gap-2 z-50 w-64">
-                        {Object.keys(ASSET_ICON_OPTIONS).map(key => {
-                          const OptionIcon = ASSET_ICON_OPTIONS[key].icon;
-                          return (
-                            <button 
-                              key={key} 
-                              onClick={() => handleIconChange(key)}
-                              className={`flex flex-col items-center p-2 rounded-lg hover:bg-blue-50 transition-colors ${asset.icon === key ? 'bg-blue-100 text-blue-700' : 'text-slate-600'}`}
-                            >
-                              <OptionIcon size={20} className="mb-1" />
-                              <span className="text-[9px] font-medium">{ASSET_ICON_OPTIONS[key].label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
+      )}
+
+      <div className="bg-white md:rounded-2xl shadow-2xl w-full max-w-4xl h-full md:h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 relative z-10" onMouseDown={(e) => e.stopPropagation()}>
+
+        {/* --- VUE DÉTAIL DE L'ACTIF --- */}
+        {viewMode === 'asset' && (
+          <>
+            {/* EN-TÊTE */}
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
+              <div>
+                <button onClick={onClose} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-2 text-sm font-medium">
+                  <ChevronLeft size={16} /> Retour
+                </button>
+
+                <div className="flex items-center gap-3 relative z-50">
+                  {/* SELECTEUR D'ICÔNE */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowIconPicker(!showIconPicker)}
+                      className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center text-blue-600 cursor-pointer"
+                      title="Changer l'icône"
+                    >
+                      {(() => {
+                        const IconComp = (ASSET_ICON_OPTIONS[asset.icon] || ASSET_ICON_OPTIONS['building']).icon;
+                        return <IconComp size={24} />;
+                      })()}
+                    </button>
+                    {showIconPicker && (
+                      <>
+                        {/* Overlay invisible pour fermer le menu en cliquant à côté */}
+                        <div className="fixed inset-0 z-40" onClick={() => setShowIconPicker(false)}></div>
+                        <div className="absolute top-full left-0 mt-2 p-2 bg-white rounded-xl shadow-xl border border-slate-200 grid grid-cols-4 gap-2 z-50 w-64">
+                          {Object.keys(ASSET_ICON_OPTIONS).map(key => {
+                            const OptionIcon = ASSET_ICON_OPTIONS[key].icon;
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => handleIconChange(key)}
+                                className={`flex flex-col items-center p-2 rounded-lg hover:bg-blue-50 transition-colors ${asset.icon === key ? 'bg-blue-100 text-blue-700' : 'text-slate-600'}`}
+                              >
+                                <OptionIcon size={20} className="mb-1" />
+                                <span className="text-[9px] font-medium">{ASSET_ICON_OPTIONS[key].label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* CHAMP NOM EDITABLE */}
+                  {isEditingName ? (
+                    <input
+                      type="text"
+                      value={editedName}
+                      onChange={(e) => setEditedName(e.target.value)}
+                      onBlur={handleSaveName}
+                      onKeyDown={handleKeyDownName}
+                      autoFocus
+                      className="text-xl md:text-2xl font-bold text-slate-800 bg-white border-b-2 border-blue-500 outline-none w-full max-w-[250px] px-1 bg-transparent"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h2
+                        onClick={() => setIsEditingName(true)}
+                        className="tour-asset-name text-xl md:text-2xl font-bold text-slate-800 hover:text-blue-600 cursor-text transition-colors border-b-2 border-transparent hover:border-blue-200 border-dashed"
+                        title="Modifier le nom"
+                      >
+                        {asset.name}
+                      </h2>
+                      {/* ETOILE COMPTE PRINCIPAL */}
+                      <button
+                        onClick={() => {
+                          if (asset.isPrimary) {
+                            onUpdate({ ...asset, isPrimary: false });
+                          } else {
+                            setShowPrimaryModal(true);
+                          }
+                        }}
+                        className={`tour-asset-primary p-1.5 rounded-full transition-all ${asset.isPrimary ? 'text-amber-400 bg-amber-50 hover:bg-amber-100 shadow-sm' : 'text-slate-300 hover:text-amber-400 hover:bg-slate-50'}`}
+                        title={asset.isPrimary ? "Compte principal" : "Définir comme compte principal"}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill={asset.isPrimary ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                      </button>
+                    </div>
                   )}
                 </div>
 
-                {/* CHAMP NOM EDITABLE */}
-                {isEditingName ? (
-                  <input 
-                    type="text" 
-                    value={editedName} 
-                    onChange={(e) => setEditedName(e.target.value)}
-                    onBlur={handleSaveName}
-                    onKeyDown={handleKeyDownName}
-                    autoFocus
-                    className="text-xl md:text-2xl font-bold text-slate-800 bg-white border-b-2 border-blue-500 outline-none w-full max-w-[250px] px-1 bg-transparent"
-                  />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <h2 
-                      onClick={() => setIsEditingName(true)}
-                      className="tour-asset-name text-xl md:text-2xl font-bold text-slate-800 hover:text-blue-600 cursor-text transition-colors border-b-2 border-transparent hover:border-blue-200 border-dashed"
-                      title="Modifier le nom"
+                <div className="flex items-center gap-1.5 mt-2 text-slate-500 text-xs md:text-sm">
+                  {/* INSTITUTION EDITABLE */}
+                  {isEditingInstitution ? (
+                    <input
+                      type="text"
+                      value={editedInstitution}
+                      onChange={(e) => setEditedInstitution(e.target.value)}
+                      onBlur={handleSaveInstitution}
+                      onKeyDown={handleKeyDownInstitution}
+                      autoFocus
+                      placeholder="Banque..."
+                      className="bg-transparent border-b-2 border-blue-500 outline-none w-24 md:w-32 text-slate-800 px-1 font-medium"
+                    />
+                  ) : (
+                    <span
+                      onClick={() => setIsEditingInstitution(true)}
+                      className="hover:text-blue-600 cursor-text transition-colors border-b-2 border-transparent hover:border-blue-200 border-dashed truncate max-w-[120px]"
+                      title="Modifier la banque"
                     >
-                      {asset.name}
-                    </h2>
-                    {/* ETOILE COMPTE PRINCIPAL */}
-                    <button 
-                      onClick={() => {
-                        if (asset.isPrimary) {
-                          onUpdate({ ...asset, isPrimary: false });
-                        } else {
-                          setShowPrimaryModal(true);
-                        }
-                      }}
-                      className={`tour-asset-primary p-1.5 rounded-full transition-all ${asset.isPrimary ? 'text-amber-400 bg-amber-50 hover:bg-amber-100 shadow-sm' : 'text-slate-300 hover:text-amber-400 hover:bg-slate-50'}`}
-                      title={asset.isPrimary ? "Compte principal" : "Définir comme compte principal"}
+                      {asset.institution || 'Sans banque'}
+                    </span>
+                  )}
+
+                  <span>•</span>
+
+                  {/* TYPE EDITABLE */}
+                  {isEditingType ? (
+                    <select
+                      value={asset.type}
+                      onChange={(e) => handleTypeChange(e.target.value)}
+                      onBlur={() => setIsEditingType(false)}
+                      autoFocus
+                      className="bg-white border border-slate-300 rounded text-slate-800 outline-none p-0.5 text-xs font-medium"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill={asset.isPrimary ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                    </button>
-                  </div>
-                )}
+                      {Object.keys(CATEGORY_LABELS).map(key => (
+                        <option key={key} value={key}>{CATEGORY_LABELS[key]}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      onClick={() => setIsEditingType(true)}
+                      className="hover:text-blue-600 cursor-pointer transition-colors border-b-2 border-transparent hover:border-blue-200 border-dashed"
+                      title="Modifier le type"
+                    >
+                      {CATEGORY_LABELS[asset.type]}
+                    </span>
+                  )}
+                </div>
               </div>
-
-              <div className="flex items-center gap-1.5 mt-2 text-slate-500 text-xs md:text-sm">
-                {/* INSTITUTION EDITABLE */}
-                {isEditingInstitution ? (
-                  <input
-                    type="text"
-                    value={editedInstitution}
-                    onChange={(e) => setEditedInstitution(e.target.value)}
-                    onBlur={handleSaveInstitution}
-                    onKeyDown={handleKeyDownInstitution}
-                    autoFocus
-                    placeholder="Banque..."
-                    className="bg-transparent border-b-2 border-blue-500 outline-none w-24 md:w-32 text-slate-800 px-1 font-medium"
-                  />
-                ) : (
-                  <span
-                    onClick={() => setIsEditingInstitution(true)}
-                    className="hover:text-blue-600 cursor-text transition-colors border-b-2 border-transparent hover:border-blue-200 border-dashed truncate max-w-[120px]"
-                    title="Modifier la banque"
-                  >
-                    {asset.institution || 'Sans banque'}
-                  </span>
-                )}
-                
-                <span>•</span>
-
-                {/* TYPE EDITABLE */}
-                {isEditingType ? (
-                  <select
-                    value={asset.type}
-                    onChange={(e) => handleTypeChange(e.target.value)}
-                    onBlur={() => setIsEditingType(false)}
-                    autoFocus
-                    className="bg-white border border-slate-300 rounded text-slate-800 outline-none p-0.5 text-xs font-medium"
-                  >
-                    {Object.keys(CATEGORY_LABELS).map(key => (
-                      <option key={key} value={key}>{CATEGORY_LABELS[key]}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span
-                    onClick={() => setIsEditingType(true)}
-                    className="hover:text-blue-600 cursor-pointer transition-colors border-b-2 border-transparent hover:border-blue-200 border-dashed"
-                    title="Modifier le type"
-                  >
-                    {CATEGORY_LABELS[asset.type]}
-                  </span>
-                )}
+              <div className="tour-asset-value text-right">
+                <p className="text-xs md:text-sm text-slate-500">Valorisation Actuelle</p>
+                <p className="text-xl md:text-3xl font-bold text-blue-600">{formatCurrency(asset.value)}</p>
               </div>
             </div>
-            <div className="tour-asset-value text-right">
-              <p className="text-xs md:text-sm text-slate-500">Valorisation Actuelle</p>
-              <p className="text-xl md:text-3xl font-bold text-blue-600">{formatCurrency(asset.value)}</p>
-            </div>
-          </div>
 
-          {/* NAVIGATION PAR ONGLETS */}
-          <div className="flex border-b border-slate-100 bg-white px-4 md:px-6">
-            {isComposite && (
-              <button 
-                onClick={() => setActiveTab('composition')}
-                className={`px-4 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'composition' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
+            {/* NAVIGATION PAR ONGLETS */}
+            <div className="flex border-b border-slate-100 bg-white px-4 md:px-6">
+              {isComposite && (
+                <button
+                  onClick={() => setActiveTab('composition')}
+                  className={`px-4 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'composition' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
+                >
+                  Composition
+                </button>
+              )}
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`tour-asset-history-tab px-4 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
               >
-                Composition
+                Historique
               </button>
-            )}
-            <button 
-              onClick={() => setActiveTab('history')}
-              className={`tour-asset-history-tab px-4 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
-            >
-              Historique
-            </button>
-            <button 
-              onClick={() => setActiveTab('analysis')}
-              className={`tour-asset-ai-tab px-4 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'analysis' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
-            >
-              Analyse IA ✨
-            </button>
-          </div>
+              <button
+                onClick={() => setActiveTab('analysis')}
+                className={`tour-asset-ai-tab px-4 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === 'analysis' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}
+              >
+                Analyse IA ✨
+              </button>
+            </div>
 
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            
-            {/* CONTENU ONGLET : COMPOSITION */}
-            {activeTab === 'composition' && isComposite && (
-              <>
-                {['investissement', 'epargne_salariale', 'crypto'].includes(asset.type) && (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div className="tour-asset-cash p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-                      <p className="text-[10px] uppercase font-bold text-indigo-600 mb-1">Cash Disponible</p>
-                      <p className="text-sm font-bold text-indigo-700">
-                        {formatCurrency(asset.positions?.find(p => p.isCash)?.value || 0)}
-                      </p>
-                    </div>
-                    <div className="tour-asset-pru p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Total Versé (PRU)</p>
-                      <p className="text-sm font-bold text-slate-700">{formatCurrency(totalInvested)}</p>
-                    </div>
-                    <div className="tour-asset-pv p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2 md:col-span-1">
-                      <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Plus-Value Latente</p>
-                      <div className="flex items-center gap-2">
-                        <p className={`text-sm font-bold ${plusValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {plusValue >= 0 ? '+' : ''}{formatCurrency(plusValue)}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+
+              {/* CONTENU ONGLET : COMPOSITION */}
+              {activeTab === 'composition' && isComposite && (
+                <>
+                  {['investissement', 'epargne_salariale', 'crypto'].includes(asset.type) && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="tour-asset-cash p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                        <p className="text-[10px] uppercase font-bold text-indigo-600 mb-1">Cash Disponible</p>
+                        <p className="text-sm font-bold text-indigo-700">
+                          {formatCurrency(asset.positions?.find(p => p.isCash)?.value || 0)}
                         </p>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${plusValue >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {plusValuePct.toFixed(2)}%
-                        </span>
+                      </div>
+                      <div className="tour-asset-pru p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Total Versé (PRU)</p>
+                        <p className="text-sm font-bold text-slate-700">{formatCurrency(totalInvested)}</p>
+                      </div>
+                      <div className="tour-asset-pv p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2 md:col-span-1">
+                        <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Plus-Value Latente</p>
+                        <div className="flex items-center gap-2">
+                          <p className={`text-sm font-bold ${plusValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {plusValue >= 0 ? '+' : ''}{formatCurrency(plusValue)}
+                          </p>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${plusValue >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {plusValuePct.toFixed(2)}%
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="space-y-6">
-                    <Card className="tour-asset-movement h-fit bg-slate-50/50 border-slate-200 shadow-sm">
-                      <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-                        <ArrowRightLeft size={18} className="text-blue-600"/> Mouvement Interne
-                      </h3>
-                      {!movementConfig ? (
-                        <>
-                          <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
-                            Déplacez vos fonds entre vos <b>espèces</b> et vos <b>supports</b>.
-                          </p>
-                          <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => setMovementConfig({type: 'buy'})} className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all group">
-                              <PlusCircle size={18} className="mb-1 text-blue-600 group-hover:scale-110 transition-transform"/>
-                              <span className="text-[10px] font-bold uppercase tracking-wider">Acheter</span>
-                            </button>
-                            <button onClick={() => setMovementConfig({type: 'sell'})} className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all group">
-                              <ArrowRightLeft size={18} className="mb-1 text-blue-600 group-hover:rotate-180 transition-transform duration-500"/>
-                              <span className="text-[10px] font-bold uppercase tracking-wider">Vendre</span>
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <form onSubmit={handleExecuteMovement} className="space-y-3 animate-in fade-in zoom-in-95">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold uppercase text-indigo-600">{movementConfig.type === 'buy' ? 'Achat de support' : 'Vente de support'}</span>
-                            <button onClick={() => setMovementConfig(null)} className="text-indigo-400 hover:text-indigo-600"><X size={14}/></button>
-                          </div>
-                          <select className="w-full p-2 text-xs rounded-lg border border-indigo-200" value={movementData.positionId} onChange={(e) => setMovementData({...movementData, positionId: e.target.value})} required>
-                            <option value="">Sélectionner un support...</option>
-                            {asset.positions.filter(p => !p.isCash).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                          <input type="number" placeholder="Montant (€)" className="w-full p-2 text-xs rounded-lg border border-indigo-200" value={movementData.amount} onChange={(e) => setMovementData({...movementData, amount: e.target.value})} required />
-                          <Button type="submit" className="w-full text-xs py-2 bg-indigo-600 text-white">Confirmer</Button>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="space-y-6">
+                      <Card className="tour-asset-movement h-fit bg-slate-50/50 border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                          <ArrowRightLeft size={18} className="text-blue-600" /> Mouvement Interne
+                        </h3>
+                        {!movementConfig ? (
+                          <>
+                            <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+                              Déplacez vos fonds entre vos <b>espèces</b> et vos <b>supports</b>.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <button onClick={() => setMovementConfig({ type: 'buy' })} className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all group">
+                                <PlusCircle size={18} className="mb-1 text-blue-600 group-hover:scale-110 transition-transform" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Acheter</span>
+                              </button>
+                              <button onClick={() => setMovementConfig({ type: 'sell' })} className="flex flex-col items-center justify-center p-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all group">
+                                <ArrowRightLeft size={18} className="mb-1 text-blue-600 group-hover:rotate-180 transition-transform duration-500" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Vendre</span>
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <form onSubmit={handleExecuteMovement} className="space-y-3 animate-in fade-in zoom-in-95">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-bold uppercase text-indigo-600">{movementConfig.type === 'buy' ? 'Achat de support' : 'Vente de support'}</span>
+                              <button onClick={() => setMovementConfig(null)} className="text-indigo-400 hover:text-indigo-600"><X size={14} /></button>
+                            </div>
+                            <select className="w-full p-2 text-xs rounded-lg border border-indigo-200" value={movementData.positionId} onChange={(e) => setMovementData({ ...movementData, positionId: e.target.value })} required>
+                              <option value="">Sélectionner un support...</option>
+                              {asset.positions.filter(p => !p.isCash).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <input type="number" placeholder="Montant (€)" className="w-full p-2 text-xs rounded-lg border border-indigo-200" value={movementData.amount} onChange={(e) => setMovementData({ ...movementData, amount: e.target.value })} required />
+                            <Button type="submit" className="w-full text-xs py-2 bg-indigo-600 text-white">Confirmer</Button>
+                          </form>
+                        )}
+                      </Card>
+
+                      <Card className="tour-asset-add-line h-fit bg-slate-50/50 border-slate-200">
+                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><PlusCircle size={20} className="text-blue-600" /> Ajouter une ligne</h3>
+                        <form onSubmit={handleAddPosition} className="space-y-4">
+                          <input type="text" className="w-full p-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: ETF S&P 500" value={newPosition.name} onChange={(e) => setNewPosition({ ...newPosition, name: e.target.value })} />
+                          <Button type="submit" className="w-full justify-center" disabled={!newPosition.name}>Créer la ligne</Button>
                         </form>
-                      )}
-                    </Card>
+                      </Card>
+                    </div>
 
-                    <Card className="tour-asset-add-line h-fit bg-slate-50/50 border-slate-200">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><PlusCircle size={20} className="text-blue-600"/> Ajouter une ligne</h3>
-                      <form onSubmit={handleAddPosition} className="space-y-4">
-                        <input type="text" className="w-full p-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: ETF S&P 500" value={newPosition.name} onChange={(e) => setNewPosition({...newPosition, name: e.target.value})} />
-                        <Button type="submit" className="w-full justify-center" disabled={!newPosition.name}>Créer la ligne</Button>
-                      </form>
+                    <Card className="tour-asset-lines lg:col-span-2 overflow-hidden flex flex-col border-slate-200 p-0">
+                      <div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">Lignes détenues</h3>
+                      </div>
+                      <div className="divide-y divide-slate-100 overflow-y-auto max-h-[400px]">
+                        {(!asset.positions || asset.positions.filter(p => !p.isCash).length === 0) ? (
+                          <div className="p-10 text-center text-slate-400">Aucune ligne investie.</div>
+                        ) : (
+                          asset.positions.filter(p => !p.isCash).map(pos => {
+                            // Calcul de la performance de la ligne
+                            const posPerf = pos.value - (pos.totalInvested || 0);
+                            const posPct = pos.totalInvested > 0 ? (posPerf / pos.totalInvested) * 100 : 0;
+
+                            return (
+                              <div
+                                key={pos.id}
+                                className="p-4 flex items-center justify-between hover:bg-slate-50 transition group cursor-pointer"
+                                onClick={() => { setSelectedPosition(pos); setViewMode('position'); }}
+                              >
+                                {/* À GAUCHE : Nom et PRU */}
+                                <div className="flex flex-col min-w-0">
+                                  <span className="font-medium text-slate-700 truncate">{pos.name}</span>
+                                </div>
+
+                                {/* À DROITE : Valeur et Indicateur de Performance */}
+                                <div className="flex items-center gap-4 flex-shrink-0">
+                                  <div className="text-right flex flex-col items-end">
+                                    <span className="font-bold text-slate-900">{formatCurrency(pos.value)}</span>
+
+                                    {/* Tag de performance (Montant + Pourcentage) */}
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${posPerf >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                        {posPerf >= 0 ? '+' : ''}{posPct.toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Bouton de suppression */}
+                                  {!pos.isCash && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setDeleteConfig({ type: 'position', id: pos.id }); }}
+                                      className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     </Card>
                   </div>
+                </>
+              )}
 
-                  <Card className="tour-asset-lines lg:col-span-2 overflow-hidden flex flex-col border-slate-200 p-0">
-                    <div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
-                      <h3 className="font-bold text-slate-700 flex items-center gap-2">Lignes détenues</h3>
-                    </div>
-                    <div className="divide-y divide-slate-100 overflow-y-auto max-h-[400px]">
-                      {(!asset.positions || asset.positions.filter(p => !p.isCash).length === 0) ? (
-                        <div className="p-10 text-center text-slate-400">Aucune ligne investie.</div>
-                      ) : (
-                        asset.positions.filter(p => !p.isCash).map(pos => {
-                          // Calcul de la performance de la ligne
-                          const posPerf = pos.value - (pos.totalInvested || 0);
-                          const posPct = pos.totalInvested > 0 ? (posPerf / pos.totalInvested) * 100 : 0;
-                          
-                          return (
-                            <div 
-                              key={pos.id} 
-                              className="p-4 flex items-center justify-between hover:bg-slate-50 transition group cursor-pointer" 
-                              onClick={() => { setSelectedPosition(pos); setViewMode('position'); }}
-                            >
-                              {/* À GAUCHE : Nom et PRU */}
-                              <div className="flex flex-col min-w-0">
-                                <span className="font-medium text-slate-700 truncate">{pos.name}</span>
-                              </div>
-                              
-                              {/* À DROITE : Valeur et Indicateur de Performance */}
-                              <div className="flex items-center gap-4 flex-shrink-0">
-                                <div className="text-right flex flex-col items-end">
-                                  <span className="font-bold text-slate-900">{formatCurrency(pos.value)}</span>
-                                  
-                                  {/* Tag de performance (Montant + Pourcentage) */}
-                                  <div className="flex items-center gap-1.5 mt-1">
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${posPerf >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                      {posPerf >= 0 ? '+' : ''}{posPct.toFixed(1)}%
-                                    </span>
-                                  </div>
+              {/* CONTENU ONGLET : HISTORIQUE */}
+              {activeTab === 'history' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+                  <div className="tour-asset-update space-y-6">
+                    {isComposite ? (
+                      <Card className="h-fit bg-indigo-50 border-indigo-100">
+                        <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Info size={20} /> Mode Synchronisé</h3>
+                        <p className="text-sm text-indigo-800 leading-relaxed">L'historique est calculé automatiquement en additionnant l'historique de chaque ligne.</p>
+                      </Card>
+                    ) : (
+                      <Card className="h-fit border-blue-200 bg-blue-50">
+                        <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2"><Edit size={20} /> Mettre à jour</h3>
+                        <form onSubmit={handleUpdateBalance} className="space-y-4">
+                          <input type="number" step="0.01" className="w-full p-3 rounded-lg border border-blue-200" value={currentBalanceUpdate} onChange={(e) => setCurrentBalanceUpdate(e.target.value)} />
+                          <Button type="submit" className="w-full">Valider</Button>
+                        </form>
+                      </Card>
+                    )}
+                    {!isComposite && (
+                      <Card className="h-fit bg-slate-50/50 border-slate-200">
+                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><History size={20} /> Point passé</h3>
+                        <form onSubmit={handleAddAssetHistory} className="space-y-4">
+                          <input type="date" className="w-full p-2 rounded-lg border border-slate-300" value={newAssetHistoryPoint.date} onChange={(e) => setNewAssetHistoryPoint({ ...newAssetHistoryPoint, date: e.target.value })} />
+                          <input type="number" step="0.01" className="w-full p-2 rounded-lg border border-slate-300" value={newAssetHistoryPoint.value} onChange={(e) => setNewAssetHistoryPoint({ ...newAssetHistoryPoint, value: e.target.value })} />
+                          <Button type="submit" className="w-full" variant="secondary">Enregistrer</Button>
+                        </form>
+                      </Card>
+                    )}
+                  </div>
+                  <div className="lg:col-span-2 space-y-6">
+                    <Card className="tour-asset-chart border-slate-200">
+                      <h3 className="font-bold text-slate-800 mb-4">Évolution du solde</h3>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={assetChartData}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                            <RechartsTooltip formatter={(val) => formatCurrency(val)} />
+                            <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={3} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Card>
+                    <Card className="tour-asset-history overflow-hidden border-slate-200 p-0">
+                      <div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
+                        <h3 className="font-bold text-slate-700">{isComposite ? "Journal des Opérations" : "Historique Global"}</h3>
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-100">
+                        {isComposite ? (
+                          unifiedHistory.length === 0 ? <div className="p-4 text-center text-slate-400">Aucune opération enregistrée.</div> : unifiedHistory.map((event, idx) => (
+                            <div key={idx} className="p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-full flex-shrink-0 ${event.isExternal ? (event.type === 'in' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600') : (event.type === 'buy' ? 'bg-indigo-100 text-indigo-600' : 'bg-orange-100 text-orange-600')}`}>
+                                  {event.isExternal ? (event.type === 'in' ? <ArrowDownRight size={14} /> : <ArrowUpRight size={14} />) : (event.type === 'buy' ? <PlusCircle size={14} /> : <ArrowRightLeft size={14} />)}
                                 </div>
-                                
-                                {/* Bouton de suppression */}
-                                {!pos.isCash && (
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); setDeleteConfig({ type: 'position', id: pos.id }); }} 
-                                  className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                                )}
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-slate-800 truncate max-w-[150px] md:max-w-[250px]">{event.label}</p>
+                                  <p className="text-[10px] text-slate-500">{new Date(event.date).toLocaleDateString()} • {event.isExternal ? (event.type === 'in' ? 'Virement Entrant' : 'Virement Sortant') : (event.type === 'buy' ? 'Achat Support' : 'Vente Support')}</p>
+                                </div>
+                              </div>
+                              <span className={`font-bold text-sm flex-shrink-0 ${event.isExternal ? (event.type === 'in' ? 'text-green-600' : 'text-red-600') : (event.type === 'buy' ? 'text-indigo-600' : 'text-orange-600')}`}>
+                                {event.type === 'in' || event.type === 'buy' ? '+' : '-'}{formatCurrency(event.amount)}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          (!asset.history || asset.history.length === 0) ? <div className="p-4 text-center text-slate-400">Aucun historique.</div> : [...asset.history].sort((a, b) => new Date(b.date) - new Date(a.date)).map((point, idx) => (
+                            <div key={idx} className="p-3 flex justify-between items-center group hover:bg-slate-50">
+                              <span className="text-sm text-slate-600 flex items-center gap-2">
+                                {new Date(point.date).toLocaleDateString()}
+                                {new Date(point.date) > new Date() && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>}
+                              </span>
+                              <div className="flex items-center gap-4">
+                                <span className="font-bold text-slate-900">{formatCurrency(point.value)}</span>
+                                <button onClick={() => setDeleteConfig({ type: 'assetHistory', id: idx })} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
                               </div>
                             </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </Card>
+                          ))
+                        )}
+                      </div>
+                    </Card>
+                  </div>
                 </div>
-              </>
-            )}
+              )}
 
-            {/* CONTENU ONGLET : HISTORIQUE */}
-            {activeTab === 'history' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-                <div className="tour-asset-update space-y-6">
-                  {isComposite ? (
-                    <Card className="h-fit bg-indigo-50 border-indigo-100">
-                      <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Info size={20} /> Mode Synchronisé</h3>
-                      <p className="text-sm text-indigo-800 leading-relaxed">L'historique est calculé automatiquement en additionnant l'historique de chaque ligne.</p>
-                    </Card>
+              {/* CONTENU ONGLET : ANALYSE */}
+              {activeTab === 'analysis' && (
+                <div className="flex flex-col h-full animate-in fade-in duration-300">
+                  <Button onClick={handleAnalyzeAsset} disabled={isAnalyzing} className="mx-auto mb-6 bg-indigo-600 text-white">
+                    {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Sparkles className="mr-2" size={18} />} Lancer l'analyse
+                  </Button>
+                  {aiAnalysis && <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 overflow-y-auto max-h-[400px]"><MessageBubble message={{ role: 'assistant', content: aiAnalysis }} /></div>}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* --- VUE DÉTAIL D'UNE POSITION --- */}
+        {viewMode === 'position' && selectedPosition && (
+          <>
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
+              <div>
+                <button onClick={() => setViewMode('asset')} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-2 text-sm font-medium"><ChevronLeft size={16} /> Retour</button>
+                <div className="flex items-center gap-2">
+                  <TrendingDown size={24} className="text-purple-600" />
+                  {isEditingPosName ? (
+                    <input
+                      type="text"
+                      value={editedPosName}
+                      onChange={(e) => setEditedPosName(e.target.value)}
+                      onBlur={handleSavePosName}
+                      onKeyDown={handleKeyDownPosName}
+                      autoFocus
+                      className="text-2xl font-bold text-slate-800 bg-transparent border-b-2 border-purple-500 outline-none w-full max-w-[250px]"
+                    />
                   ) : (
-                    <Card className="h-fit border-blue-200 bg-blue-50">
-                      <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2"><Edit size={20}/> Mettre à jour</h3>
-                      <form onSubmit={handleUpdateBalance} className="space-y-4">
-                        <input type="number" step="0.01" className="w-full p-3 rounded-lg border border-blue-200" value={currentBalanceUpdate} onChange={(e) => setCurrentBalanceUpdate(e.target.value)} />
-                        <Button type="submit" className="w-full">Valider</Button>
-                      </form>
-                    </Card>
-                  )}
-                  {!isComposite && (
-                    <Card className="h-fit bg-slate-50/50 border-slate-200">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><History size={20}/> Point passé</h3>
-                      <form onSubmit={handleAddAssetHistory} className="space-y-4">
-                        <input type="date" className="w-full p-2 rounded-lg border border-slate-300" value={newAssetHistoryPoint.date} onChange={(e) => setNewAssetHistoryPoint({...newAssetHistoryPoint, date: e.target.value})} />
-                        <input type="number" step="0.01" className="w-full p-2 rounded-lg border border-slate-300" value={newAssetHistoryPoint.value} onChange={(e) => setNewAssetHistoryPoint({...newAssetHistoryPoint, value: e.target.value})} />
-                        <Button type="submit" className="w-full" variant="secondary">Enregistrer</Button>
-                      </form>
-                    </Card>
+                    <h2
+                      onClick={() => setIsEditingPosName(true)}
+                      className="text-2xl font-bold text-slate-800 hover:text-purple-600 cursor-text transition-colors border-b-2 border-transparent hover:border-purple-200 border-dashed"
+                      title="Modifier le nom"
+                    >
+                      {selectedPosition.name}
+                    </h2>
                   )}
                 </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-slate-500">Valeur Actuelle (Marché)</p>
+                <p className="text-3xl font-bold text-purple-600">{formatCurrency(selectedPosition.value)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-6 py-4 bg-white border-b border-slate-100">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Total Versé</p>
+                <p className="text-sm font-bold text-slate-700">{formatCurrency(selectedPosition.totalInvested || 0)}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Performance</p>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-bold ${(selectedPosition.value - (selectedPosition.totalInvested || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(selectedPosition.value - (selectedPosition.totalInvested || 0))}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${(selectedPosition.value - (selectedPosition.totalInvested || 0)) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{selectedPosition.totalInvested > 0 ? (((selectedPosition.value - selectedPosition.totalInvested) / selectedPosition.totalInvested) * 100).toFixed(2) : 0}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="h-fit bg-slate-50/50 border-slate-200">
+                  <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><History size={20} className="text-purple-600" /> Évolution</h3>
+                  <form onSubmit={handleAddPositionHistory} className="space-y-4">
+                    <input type="date" className="w-full p-2 rounded-lg border border-slate-300" value={newPosHistoryPoint.date} onChange={(e) => setNewPosHistoryPoint({ ...newPosHistoryPoint, date: e.target.value })} />
+                    <input type="number" className="w-full p-2 rounded-lg border border-slate-300" placeholder="0.00" value={newPosHistoryPoint.value} onChange={(e) => setNewPosHistoryPoint({ ...newPosHistoryPoint, value: e.target.value })} />
+                    <Button type="submit" className="w-full justify-center bg-purple-600 hover:bg-purple-700 text-white">Enregistrer</Button>
+                  </form>
+                </Card>
+
                 <div className="lg:col-span-2 space-y-6">
-                  <Card className="tour-asset-chart border-slate-200">
-                    <h3 className="font-bold text-slate-800 mb-4">Évolution du solde</h3>
+                  <Card className="border-slate-200">
+                    <h3 className="font-bold text-slate-800 mb-4">Performance Historique</h3>
                     <div className="h-64 w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={assetChartData}>
+                        <AreaChart data={positionChartData}>
+                          <defs>
+                            <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#9333ea" stopOpacity={0.4} />
+                              <stop offset="90%" stopColor="#9333ea" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                          <YAxis tick={{ fontSize: 12 }} />
                           <RechartsTooltip formatter={(val) => formatCurrency(val)} />
-                          <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={3} />
+                          <Area type="monotone" dataKey="value" stroke="#9333ea" fillOpacity={1} fill="url(#colorPos)" />
+
+                          {/* AJOUT : Lignes verticales pour les achats (vert) et ventes (rouge) */}
+                          {(selectedPosition.history || [])
+                            .filter(h => h.movementTag)
+                            .map((h, idx) => (
+                              <ReferenceLine
+                                key={idx}
+                                x={h.date}
+                                stroke={h.movementTag === 'buy' ? '#22c55e' : '#ef4444'}
+                                strokeWidth={2}
+                                strokeDasharray="3 3"
+                              />
+                            ))}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   </Card>
-                  <Card className="tour-asset-history overflow-hidden border-slate-200 p-0">
-                    <div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
-                      <h3 className="font-bold text-slate-700">{isComposite ? "Journal des Opérations" : "Historique Global"}</h3>
-                    </div>
+                  <Card className="overflow-hidden border-slate-200 p-0">
+                    <div className="bg-slate-50 p-4 border-b border-slate-100 font-bold">Historique de la ligne</div>
                     <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-100">
-                      {isComposite ? (
-                        unifiedHistory.length === 0 ? <div className="p-4 text-center text-slate-400">Aucune opération enregistrée.</div> : unifiedHistory.map((event, idx) => (
-                          <div key={idx} className="p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-full flex-shrink-0 ${event.isExternal ? (event.type === 'in' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600') : (event.type === 'buy' ? 'bg-indigo-100 text-indigo-600' : 'bg-orange-100 text-orange-600')}`}>
-                                {event.isExternal ? (event.type === 'in' ? <ArrowDownRight size={14}/> : <ArrowUpRight size={14}/>) : (event.type === 'buy' ? <PlusCircle size={14}/> : <ArrowRightLeft size={14}/>)}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-bold text-slate-800 truncate max-w-[150px] md:max-w-[250px]">{event.label}</p>
-                                <p className="text-[10px] text-slate-500">{new Date(event.date).toLocaleDateString()} • {event.isExternal ? (event.type === 'in' ? 'Virement Entrant' : 'Virement Sortant') : (event.type === 'buy' ? 'Achat Support' : 'Vente Support')}</p>
-                              </div>
-                            </div>
-                            <span className={`font-bold text-sm flex-shrink-0 ${event.isExternal ? (event.type === 'in' ? 'text-green-600' : 'text-red-600') : (event.type === 'buy' ? 'text-indigo-600' : 'text-orange-600')}`}>
-                              {event.type === 'in' || event.type === 'buy' ? '+' : '-'}{formatCurrency(event.amount)}
-                            </span>
-                          </div>
-                        ))
-                      ) : (
-                        (!asset.history || asset.history.length === 0) ? <div className="p-4 text-center text-slate-400">Aucun historique.</div> : [...asset.history].sort((a,b) => new Date(b.date) - new Date(a.date)).map((point, idx) => (
-                          <div key={idx} className="p-3 flex justify-between items-center group hover:bg-slate-50">
+                      {[...(selectedPosition.history || [])]
+                        .sort((a, b) => {
+                          const dateDiff = new Date(b.date) - new Date(a.date);
+                          if (dateDiff === 0 && b.id && a.id) return b.id - a.id;
+                          return dateDiff;
+                        })
+                        .map((point, idx) => (
+                          <div key={idx} className="p-3 flex justify-between items-center hover:bg-slate-50 group">
                             <span className="text-sm text-slate-600 flex items-center gap-2">
                               {new Date(point.date).toLocaleDateString()}
-                              {new Date(point.date) > new Date() && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>}
+
+                              {/* AFFICHAGE DU TAG SI MOUVEMENT */}
+                              {point.movementTag && point.movementTag !== 'creation' && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${point.movementTag === 'buy' ? 'bg-green-100 text-green-700' : point.movementTag === 'sell' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {point.movementTag === 'buy' ? 'ACHAT' : point.movementTag === 'sell' ? 'VENTE' : 'ÉVOLUTION'}
+                                </span>
+                              )}
+
+                              {!point.movementTag && new Date(point.date) > new Date() && (
+                                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>
+                              )}
                             </span>
+
                             <div className="flex items-center gap-4">
-                              <span className="font-bold text-slate-900">{formatCurrency(point.value)}</span>
-                              <button onClick={() => setDeleteConfig({ type: 'assetHistory', id: idx })} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                              <div className="text-right flex flex-col items-end">
+                                {point.movementAmount !== undefined && point.movementTag !== 'creation' && (
+                                  <span className={`text-xs font-bold ${point.movementTag === 'buy' ? 'text-green-600' :
+                                      point.movementTag === 'sell' ? 'text-red-600' :
+                                        point.movementAmount > 0 ? 'text-blue-600' :
+                                          point.movementAmount < 0 ? 'text-orange-500' : 'text-slate-500'
+                                    }`}>
+                                    {point.movementTag === 'buy' ? '+' : point.movementTag === 'sell' ? '-' : point.movementAmount > 0 ? '+' : ''}{formatCurrency(point.movementTag === 'sell' ? point.movementAmount : point.movementAmount)}
+                                  </span>
+                                )}
+                                <span className={(point.movementTag && point.movementTag !== 'creation') ? "text-[10px] text-slate-500" : "font-bold text-slate-900"}>
+                                  {(point.movementTag && point.movementTag !== 'creation') ? `Solde: ${formatCurrency(point.value)}` : formatCurrency(point.value)}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => setDeleteConfig({ type: 'posHistory', id: idx })}
+                                className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </div>
-                        ))
-                      )}
+                        ))}
                     </div>
                   </Card>
                 </div>
               </div>
-            )}
-
-            {/* CONTENU ONGLET : ANALYSE */}
-            {activeTab === 'analysis' && (
-              <div className="flex flex-col h-full animate-in fade-in duration-300">
-                <Button onClick={handleAnalyzeAsset} disabled={isAnalyzing} className="mx-auto mb-6 bg-indigo-600 text-white">
-                  {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Sparkles className="mr-2" size={18} />} Lancer l'analyse
-                </Button>
-                {aiAnalysis && <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 overflow-y-auto max-h-[400px]"><MessageBubble message={{ role: 'assistant', content: aiAnalysis }} /></div>}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* --- VUE DÉTAIL D'UNE POSITION --- */}
-      {viewMode === 'position' && selectedPosition && (
-        <>
-          <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
-            <div>
-              <button onClick={() => setViewMode('asset')} className="flex items-center gap-1 text-slate-500 hover:text-slate-800 mb-2 text-sm font-medium"><ChevronLeft size={16} /> Retour</button>
-              <div className="flex items-center gap-2">
-                <TrendingDown size={24} className="text-purple-600"/>
-                {isEditingPosName ? (
-                  <input 
-                    type="text" 
-                    value={editedPosName} 
-                    onChange={(e) => setEditedPosName(e.target.value)}
-                    onBlur={handleSavePosName}
-                    onKeyDown={handleKeyDownPosName}
-                    autoFocus
-                    className="text-2xl font-bold text-slate-800 bg-transparent border-b-2 border-purple-500 outline-none w-full max-w-[250px]"
-                  />
-                ) : (
-                  <h2 
-                    onClick={() => setIsEditingPosName(true)}
-                    className="text-2xl font-bold text-slate-800 hover:text-purple-600 cursor-text transition-colors border-b-2 border-transparent hover:border-purple-200 border-dashed"
-                    title="Modifier le nom"
-                  >
-                    {selectedPosition.name}
-                  </h2>
-                )}
-              </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-slate-500">Valeur Actuelle (Marché)</p>
-              <p className="text-3xl font-bold text-purple-600">{formatCurrency(selectedPosition.value)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-6 py-4 bg-white border-b border-slate-100">
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Total Versé</p>
-              <p className="text-sm font-bold text-slate-700">{formatCurrency(selectedPosition.totalInvested || 0)}</p>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Performance</p>
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-bold ${(selectedPosition.value - (selectedPosition.totalInvested || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(selectedPosition.value - (selectedPosition.totalInvested || 0))}</span>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${(selectedPosition.value - (selectedPosition.totalInvested || 0)) >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{selectedPosition.totalInvested > 0 ? (((selectedPosition.value - selectedPosition.totalInvested) / selectedPosition.totalInvested) * 100).toFixed(2) : 0}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="h-fit bg-slate-50/50 border-slate-200">
-                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><History size={20} className="text-purple-600"/> Évolution</h3>
-                <form onSubmit={handleAddPositionHistory} className="space-y-4">
-                  <input type="date" className="w-full p-2 rounded-lg border border-slate-300" value={newPosHistoryPoint.date} onChange={(e) => setNewPosHistoryPoint({...newPosHistoryPoint, date: e.target.value})} />
-                  <input type="number" className="w-full p-2 rounded-lg border border-slate-300" placeholder="0.00" value={newPosHistoryPoint.value} onChange={(e) => setNewPosHistoryPoint({...newPosHistoryPoint, value: e.target.value})} />
-                  <Button type="submit" className="w-full justify-center bg-purple-600 hover:bg-purple-700 text-white">Enregistrer</Button>
-                </form>
-              </Card>
-
-              <div className="lg:col-span-2 space-y-6">
-                <Card className="border-slate-200">
-                  <h3 className="font-bold text-slate-800 mb-4">Performance Historique</h3>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={positionChartData}>
-                        <defs>
-                          <linearGradient id="colorPos" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#9333ea" stopOpacity={0.4}/>
-                            <stop offset="90%" stopColor="#9333ea" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="date" tick={{fontSize: 12}} />
-                        <YAxis tick={{fontSize: 12}} />
-                        <RechartsTooltip formatter={(val) => formatCurrency(val)} />
-                        <Area type="monotone" dataKey="value" stroke="#9333ea" fillOpacity={1} fill="url(#colorPos)" />
-                        
-                        {/* AJOUT : Lignes verticales pour les achats (vert) et ventes (rouge) */}
-                        {(selectedPosition.history || [])
-                          .filter(h => h.movementTag)
-                          .map((h, idx) => (
-                            <ReferenceLine 
-                              key={idx} 
-                              x={h.date} 
-                              stroke={h.movementTag === 'buy' ? '#22c55e' : '#ef4444'} 
-                              strokeWidth={2}
-                              strokeDasharray="3 3"
-                            />
-                        ))}
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-                <Card className="overflow-hidden border-slate-200 p-0">
-                  <div className="bg-slate-50 p-4 border-b border-slate-100 font-bold">Historique de la ligne</div>
-                  <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-100">
-                    {[...(selectedPosition.history || [])]
-                      .sort((a, b) => {
-                        const dateDiff = new Date(b.date) - new Date(a.date);
-                        if (dateDiff === 0 && b.id && a.id) return b.id - a.id;
-                        return dateDiff;
-                      })
-                      .map((point, idx) => (
-                        <div key={idx} className="p-3 flex justify-between items-center hover:bg-slate-50 group">
-                          <span className="text-sm text-slate-600 flex items-center gap-2">
-                            {new Date(point.date).toLocaleDateString()}
-                            
-                            {/* AFFICHAGE DU TAG SI MOUVEMENT */}
-                            {point.movementTag && point.movementTag !== 'creation' && (
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${point.movementTag === 'buy' ? 'bg-green-100 text-green-700' : point.movementTag === 'sell' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                                {point.movementTag === 'buy' ? 'ACHAT' : point.movementTag === 'sell' ? 'VENTE' : 'ÉVOLUTION'}
-                              </span>
-                            )}
-                            
-                            {!point.movementTag && new Date(point.date) > new Date() && (
-                              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>
-                            )}
-                          </span>
-                          
-                          <div className="flex items-center gap-4">
-                            <div className="text-right flex flex-col items-end">
-                               {point.movementAmount !== undefined && point.movementTag !== 'creation' && (
-                                  <span className={`text-xs font-bold ${
-                                    point.movementTag === 'buy' ? 'text-green-600' : 
-                                    point.movementTag === 'sell' ? 'text-red-600' : 
-                                    point.movementAmount > 0 ? 'text-blue-600' : 
-                                    point.movementAmount < 0 ? 'text-orange-500' : 'text-slate-500'
-                                  }`}>
-                                    {point.movementTag === 'buy' ? '+' : point.movementTag === 'sell' ? '-' : point.movementAmount > 0 ? '+' : ''}{formatCurrency(point.movementTag === 'sell' ? point.movementAmount : point.movementAmount)}
-                                  </span>
-                               )}
-                               <span className={(point.movementTag && point.movementTag !== 'creation') ? "text-[10px] text-slate-500" : "font-bold text-slate-900"}>
-                                  {(point.movementTag && point.movementTag !== 'creation') ? `Solde: ${formatCurrency(point.value)}` : formatCurrency(point.value)}
-                               </span>
-                            </div>
-                            <button 
-                              onClick={() => setDeleteConfig({ type: 'posHistory', id: idx })} 
-                              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                            >
-                              <Trash2 size={14}/>
-                            </button>
-                          </div>
-                        </div>
-                    ))}
-                  </div>
-                </Card>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
 };
 
 const TransactionCalendar = ({ transactions, filterMonth, onDayClick }) => {
@@ -2107,13 +2115,13 @@ const TransactionCalendar = ({ transactions, filterMonth, onDayClick }) => {
   // Calcul des totaux par jour
   const dailyData = {};
   transactions.forEach(t => {
-     const tDate = new Date(t.date);
-     if (tDate.getFullYear() === year && tDate.getMonth() === month) {
-        const day = tDate.getDate();
-        if (!dailyData[day]) dailyData[day] = { income: 0, expense: 0 };
-        if (t.type === 'income') dailyData[day].income += t.amount;
-        if (t.type === 'expense') dailyData[day].expense += t.amount;
-     }
+    const tDate = new Date(t.date);
+    if (tDate.getFullYear() === year && tDate.getMonth() === month) {
+      const day = tDate.getDate();
+      if (!dailyData[day]) dailyData[day] = { income: 0, expense: 0 };
+      if (t.type === 'income') dailyData[day].income += t.amount;
+      if (t.type === 'expense') dailyData[day].expense += t.amount;
+    }
   });
 
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -2123,39 +2131,39 @@ const TransactionCalendar = ({ transactions, filterMonth, onDayClick }) => {
   return (
     <div className="p-2 sm:p-4 bg-slate-50/50 rounded-xl h-full flex flex-col animate-in fade-in duration-300">
       <div className="flex justify-between items-center mb-4 px-2">
-         <h4 className="font-bold text-slate-700 capitalize text-lg">{monthName}</h4>
-         {/* Navigation permise seulement si aucun mois n'est imposé par le graphique */}
-         {!filterMonth && (
-           <div className="flex gap-2">
-             <button onClick={() => setDisplayDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-slate-200 text-slate-500 rounded-lg transition-colors"><ChevronLeft size={18}/></button>
-             <button onClick={() => setDisplayDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-slate-200 text-slate-500 rounded-lg transition-colors"><ChevronRight size={18}/></button>
-           </div>
-         )}
+        <h4 className="font-bold text-slate-700 capitalize text-lg">{monthName}</h4>
+        {/* Navigation permise seulement si aucun mois n'est imposé par le graphique */}
+        {!filterMonth && (
+          <div className="flex gap-2">
+            <button onClick={() => setDisplayDate(new Date(year, month - 1, 1))} className="p-1.5 hover:bg-slate-200 text-slate-500 rounded-lg transition-colors"><ChevronLeft size={18} /></button>
+            <button onClick={() => setDisplayDate(new Date(year, month + 1, 1))} className="p-1.5 hover:bg-slate-200 text-slate-500 rounded-lg transition-colors"><ChevronRight size={18} /></button>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-7 gap-1 text-center mb-2">
         {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(d => <div key={d} className="text-[10px] md:text-xs font-bold text-slate-400 uppercase">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-1 md:gap-2 auto-rows-[minmax(50px,_1fr)] md:auto-rows-[minmax(70px,_1fr)]">
-         {blanks.map(b => <div key={`blank-${b}`} className="bg-transparent rounded-lg" />)}
-         {daysArray.map(day => {
-            const data = dailyData[day];
-            const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
-            const hasData = data?.income > 0 || data?.expense > 0;
-            const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            return (
-              <div 
-                key={day} 
-                onClick={() => onDayClick && onDayClick(formattedDate)}
-                className={`relative flex flex-col items-center p-1 md:p-2 rounded-lg border shadow-sm cursor-pointer ${isToday ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-slate-100 hover:border-blue-300'} transition-colors`}
-              >
-                 <span className={`text-xs md:text-sm font-semibold ${isToday ? 'text-blue-700' : hasData ? 'text-slate-900' : 'text-slate-400'}`}>{day}</span>
-                 <div className="flex flex-col items-center mt-auto w-full px-0.5 space-y-0.5">
-                   {data?.income > 0 && <span className="text-[9px] md:text-[10px] font-bold text-green-600 leading-none truncate w-full text-center">+{Math.round(data.income)}€</span>}
-                   {data?.expense > 0 && <span className="text-[9px] md:text-[10px] font-bold text-red-500 leading-none truncate w-full text-center">-{Math.round(data.expense)}€</span>}
-                 </div>
+        {blanks.map(b => <div key={`blank-${b}`} className="bg-transparent rounded-lg" />)}
+        {daysArray.map(day => {
+          const data = dailyData[day];
+          const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+          const hasData = data?.income > 0 || data?.expense > 0;
+          const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          return (
+            <div
+              key={day}
+              onClick={() => onDayClick && onDayClick(formattedDate)}
+              className={`relative flex flex-col items-center p-1 md:p-2 rounded-lg border shadow-sm cursor-pointer ${isToday ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-slate-100 hover:border-blue-300'} transition-colors`}
+            >
+              <span className={`text-xs md:text-sm font-semibold ${isToday ? 'text-blue-700' : hasData ? 'text-slate-900' : 'text-slate-400'}`}>{day}</span>
+              <div className="flex flex-col items-center mt-auto w-full px-0.5 space-y-0.5">
+                {data?.income > 0 && <span className="text-[9px] md:text-[10px] font-bold text-green-600 leading-none truncate w-full text-center">+{Math.round(data.income)}€</span>}
+                {data?.expense > 0 && <span className="text-[9px] md:text-[10px] font-bold text-red-500 leading-none truncate w-full text-center">-{Math.round(data.expense)}€</span>}
               </div>
-            )
-         })}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -2189,8 +2197,8 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
     if (filterCategory) result = result.filter(t => t.category === filterCategory);
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(t => 
-        t.label.toLowerCase().includes(query) || 
+      result = result.filter(t =>
+        t.label.toLowerCase().includes(query) ||
         t.date.includes(query)
       );
     }
@@ -2238,7 +2246,7 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
   const cashflowHistoryData = useMemo(() => processFlowData(timeRange, transactions), [timeRange, transactions]);
 
   const netWorth = assets ? assets.reduce((acc, item) => acc + item.value, 0) : 0;
-   
+
   const liquidities = assets ? assets.filter(a => a.type === 'liquidite').reduce((acc, a) => acc + a.value, 0) : 0;
   const investments = assets ? assets.filter(a => ['investissement', 'crypto', 'immobilier', 'epargne_salariale'].includes(a.type)).reduce((acc, a) => acc + a.value, 0) : 0;
 
@@ -2296,7 +2304,7 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
     if (value >= 1000000) {
       return (value / 1000000).toFixed(2) + ' M€';
     } else if (value >= 10000) {
-       return (value / 1000).toFixed(0) + ' k€';
+      return (value / 1000).toFixed(0) + ' k€';
     }
     return formatCurrency(value);
   };
@@ -2331,24 +2339,24 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
       <AreaChart data={evolutionData}>
         <defs>
           <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#2563eb" stopOpacity={0.5}/>
-            <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
+            <stop offset="5%" stopColor="#2563eb" stopOpacity={0.5} />
+            <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10}/>
-        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(0)}k` : val} />
-        <RechartsTooltip 
-          cursor={{stroke: '#cbd5e1', strokeWidth: 1}} 
-          contentStyle={{ 
-            borderRadius: '12px', 
-            border: 'none', 
+        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+        <RechartsTooltip
+          cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+          contentStyle={{
+            borderRadius: '12px',
+            border: 'none',
             boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
             backgroundColor: 'rgba(255, 255, 255, 0.8)', // Fond transparent
             backdropFilter: 'blur(4px)',               // Effet de flou
             padding: '8px 12px',
             fontSize: '12px'
-          }} 
+          }}
           offset={25}                                  // Décale la bulle du doigt
           allowEscapeViewBox={{ x: false, y: true }}
           wrapperStyle={{ pointerEvents: 'none' }}
@@ -2364,13 +2372,13 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={evolutionData} barSize={20}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10}/>
-        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(0)}k` : val} />
-        <RechartsTooltip 
-          cursor={{fill: '#f8fafc'}} 
-          contentStyle={{ 
-            borderRadius: '12px', 
-            border: 'none', 
+        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+        <RechartsTooltip
+          cursor={{ fill: '#f8fafc' }}
+          contentStyle={{
+            borderRadius: '12px',
+            border: 'none',
             boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
             backgroundColor: 'rgba(255, 255, 255, 0.8)',
             backdropFilter: 'blur(4px)',
@@ -2392,13 +2400,13 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
       </BarChart>
     </ResponsiveContainer>
   );
-   
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 text-slate-900 bg-slate-100 min-h-screen p-4 pb-24 md:pb-8">
       <ConfirmationModal isOpen={!!transactionToDelete} onClose={() => setTransactionToDelete(null)} onConfirm={() => { onDeleteTransaction(transactionToDelete); setTransactionToDelete(null); }} message="Supprimer cette opération ?" />
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
         <div>
-            {userProfile?.firstName && <h1 className="text-2xl font-bold text-slate-800">Bonjour, {userProfile.firstName} 👋</h1>}
+          {userProfile?.firstName && <h1 className="text-2xl font-bold text-slate-800">Bonjour, {userProfile.firstName} 👋</h1>}
         </div>
         <div className="flex gap-2"><Button variant="magic" onClick={handleAnalyzeDashboard} disabled={isAnalyzing} className="text-xs px-3 py-1.5">{isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{isAnalyzing ? "..." : "Analyser"}</Button><div className="bg-white p-1 rounded-lg border border-slate-300 shadow-sm flex">{['6M', '1Y', '5Y', 'ALL'].map(range => (<button key={range} onClick={() => setTimeRange(range)} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${timeRange === range ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}>{range === 'ALL' ? 'Tout' : range}</button>))}</div></div>
       </div>
@@ -2411,104 +2419,104 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
         <Card className="lg:col-span-2 flex flex-col border-slate-300 min-h-[400px]">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <TrendingUp size={20} className="text-blue-600 shrink-0"/> 
+              <TrendingUp size={20} className="text-blue-600 shrink-0" />
               <span className="leading-tight">Évolution du Patrimoine</span>
             </h3>
-            
+
             <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 w-full sm:w-auto justify-center">
-                <button 
-                  onClick={() => setChartMode('global')} 
-                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${chartMode === 'global' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  <LineChartIcon size={14} /> Global
-                </button>
-                <button 
-                  onClick={() => setChartMode('detailed')} 
-                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${chartMode === 'detailed' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  <BarChart2 size={14} /> Détail
-                </button>
+              <button
+                onClick={() => setChartMode('global')}
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${chartMode === 'global' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <LineChartIcon size={14} /> Global
+              </button>
+              <button
+                onClick={() => setChartMode('detailed')}
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${chartMode === 'detailed' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <BarChart2 size={14} /> Détail
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-[300px]">
-             {chartMode === 'global' ? renderGlobalChart() : renderDetailedChart()}
+            {chartMode === 'global' ? renderGlobalChart() : renderDetailedChart()}
           </div>
         </Card>
-        
+
         <Card className="border-slate-300 flex flex-col relative min-h-[400px]">
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 absolute top-6 left-6 z-10">
-            <PieIcon size={20} className="text-blue-600"/> Répartition
+            <PieIcon size={20} className="text-blue-600" /> Répartition
           </h3>
-          
-          <div className="flex-1 w-full relative mt-12 min-h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                      <Pie 
-                        data={allocationData} 
-                        innerRadius={70} 
-                        outerRadius={105}
-                        paddingAngle={4} 
-                        dataKey="value"
-                        label={renderAssetLabel}
-                        labelLine={false}
-                        onMouseEnter={onPieEnter}
-                        onMouseLeave={onPieLeave}
-                        animationDuration={800}
-                        tabIndex={-1}
-                        style={{ outline: 'none' }}
-                      >
-                          {allocationData.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={COLORS[entry.type] || '#cbd5e1'} 
-                              stroke="none"
-                              opacity={activeIndex === -1 || activeIndex === index ? 1 : 0.4}
-                              style={{ transition: 'opacity 0.2s ease', outline: 'none' }}
-                            />
-                          ))}
-                      </Pie>
-                      <RechartsTooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(4px)', fontSize: '12px', padding: '8px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        offset={20}
-                        wrapperStyle={{ pointerEvents: 'none' }}
-                        formatter={(value) => [formatCurrency(value), 'Valeur']}
-                        allowEscapeViewBox={{ x: false, y: true }} 
-                      />
-                  </PieChart>
-              </ResponsiveContainer>
 
-              {/* Texte Central Dynamique */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0" style={{top: '0'}}>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                    {activeIndex !== -1 ? `${((allocationData[activeIndex].value / netWorth) * 100).toFixed(1)}%` : "Total"}
-                  </span>
-                  <span className="text-2xl font-extrabold transition-colors duration-200" style={{ color: activeIndex !== -1 ? COLORS[allocationData[activeIndex].type] : '#1e293b' }}>
-                    {formatWealth(activeIndex !== -1 ? allocationData[activeIndex].value : netWorth)}
-                  </span>
-                  <span className="text-[10px] font-bold text-slate-600 mt-1 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100 shadow-sm">
-                    {activeIndex !== -1 ? allocationData[activeIndex].name : "Patrimoine"}
-                  </span>
-              </div>
+          <div className="flex-1 w-full relative mt-12 min-h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <Pie
+                  data={allocationData}
+                  innerRadius={70}
+                  outerRadius={105}
+                  paddingAngle={4}
+                  dataKey="value"
+                  label={renderAssetLabel}
+                  labelLine={false}
+                  onMouseEnter={onPieEnter}
+                  onMouseLeave={onPieLeave}
+                  animationDuration={800}
+                  tabIndex={-1}
+                  style={{ outline: 'none' }}
+                >
+                  {allocationData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[entry.type] || '#cbd5e1'}
+                      stroke="none"
+                      opacity={activeIndex === -1 || activeIndex === index ? 1 : 0.4}
+                      style={{ transition: 'opacity 0.2s ease', outline: 'none' }}
+                    />
+                  ))}
+                </Pie>
+                <RechartsTooltip
+                  contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(4px)', fontSize: '12px', padding: '8px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  offset={20}
+                  wrapperStyle={{ pointerEvents: 'none' }}
+                  formatter={(value) => [formatCurrency(value), 'Valeur']}
+                  allowEscapeViewBox={{ x: false, y: true }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+
+            {/* Texte Central Dynamique */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0" style={{ top: '0' }}>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                {activeIndex !== -1 ? `${((allocationData[activeIndex].value / netWorth) * 100).toFixed(1)}%` : "Total"}
+              </span>
+              <span className="text-2xl font-extrabold transition-colors duration-200" style={{ color: activeIndex !== -1 ? COLORS[allocationData[activeIndex].type] : '#1e293b' }}>
+                {formatWealth(activeIndex !== -1 ? allocationData[activeIndex].value : netWorth)}
+              </span>
+              <span className="text-[10px] font-bold text-slate-600 mt-1 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-100 shadow-sm">
+                {activeIndex !== -1 ? allocationData[activeIndex].name : "Patrimoine"}
+              </span>
+            </div>
           </div>
 
           {/* Légende Interactive */}
           <div className="mt-4 flex flex-wrap justify-center gap-2 px-2 overflow-y-auto max-h-24 no-scrollbar pb-2">
-              {allocationData.map((entry, index) => (
-                  <div 
-                    key={entry.type} 
-                    onClick={() => {
-                        // Logique de dé-sélection pour le patrimoine
-                        const newIndex = activeIndex === index ? -1 : index;
-                        setActiveIndex(newIndex);
-                    }}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all cursor-pointer ${activeIndex === index ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100 scale-105' : 'bg-white border-slate-100'}`}
-                  >
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[entry.type] }} />
-                      <span className="text-[10px] font-bold text-slate-700">{entry.name}</span>
-                  </div>
-              ))}
+            {allocationData.map((entry, index) => (
+              <div
+                key={entry.type}
+                onClick={() => {
+                  // Logique de dé-sélection pour le patrimoine
+                  const newIndex = activeIndex === index ? -1 : index;
+                  setActiveIndex(newIndex);
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md border transition-all cursor-pointer ${activeIndex === index ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100 scale-105' : 'bg-white border-slate-100'}`}
+              >
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[entry.type] }} />
+                <span className="text-[10px] font-bold text-slate-700">{entry.name}</span>
+              </div>
+            ))}
           </div>
-      </Card>
+        </Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <Card className="relative border-slate-300">
@@ -2516,21 +2524,21 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
             {/* En-tête : Empilé sur mobile, aligné sur desktop */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <ArrowRightLeft size={20} className="text-purple-600 shrink-0"/> 
+                <ArrowRightLeft size={20} className="text-purple-600 shrink-0" />
                 <span className="leading-tight">Revenus & Dépenses</span>
               </h3>
-              
-              <Button 
-                variant="magic" 
-                onClick={handleForecast} 
-                disabled={isForecasting} 
+
+              <Button
+                variant="magic"
+                onClick={handleForecast}
+                disabled={isForecasting}
                 className="text-xs px-4 py-2 h-9 w-full sm:w-auto shadow-sm"
               >
                 {isForecasting ? <Loader2 size={14} className="animate-spin" /> : <Calculator size={14} />}
                 <span>Prévision</span>
               </Button>
             </div>
-            
+
             {/* Encadré d'information plus aéré */}
             <div className="flex items-start gap-2 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
               <div className="bg-blue-100 p-1.5 rounded-full text-blue-600 shrink-0 mt-0.5">
@@ -2541,37 +2549,37 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
               </p>
             </div>
           </div>
-            {forecast && <div className="absolute top-16 left-6 right-6 z-20 bg-white/90 backdrop-blur-md p-4 rounded-xl border border-indigo-100 shadow-lg"><div className="flex justify-between"><h4 className="font-bold text-indigo-900">Prévision IA</h4><button onClick={() => setForecast(null)}><X size={16}/></button></div><div className="grid grid-cols-3 gap-4 mb-3 text-center"><div className="p-2 bg-green-50 rounded-lg"><p className="text-xs text-green-700">Revenus</p><p className="font-bold">{formatCurrency(forecast.revenus)}</p></div><div className="p-2 bg-red-50 rounded-lg"><p className="text-xs text-red-700">Dépenses</p><p className="font-bold">{formatCurrency(forecast.depenses)}</p></div></div><p className="text-xs text-slate-600 italic">{forecast.conseil}</p></div>}
-            
-            <InteractiveBudgetChart 
-              cashflowData={cashflowHistoryData} 
-              transactions={transactions} 
-              hasFlowData={hasFlowData}
-              onMonthSelect={setFilterMonth}      // Connexion au filtre de mois
-              onCategorySelect={setFilterCategory} // Connexion au filtre de catégorie
+          {forecast && <div className="absolute top-16 left-6 right-6 z-20 bg-white/90 backdrop-blur-md p-4 rounded-xl border border-indigo-100 shadow-lg"><div className="flex justify-between"><h4 className="font-bold text-indigo-900">Prévision IA</h4><button onClick={() => setForecast(null)}><X size={16} /></button></div><div className="grid grid-cols-3 gap-4 mb-3 text-center"><div className="p-2 bg-green-50 rounded-lg"><p className="text-xs text-green-700">Revenus</p><p className="font-bold">{formatCurrency(forecast.revenus)}</p></div><div className="p-2 bg-red-50 rounded-lg"><p className="text-xs text-red-700">Dépenses</p><p className="font-bold">{formatCurrency(forecast.depenses)}</p></div></div><p className="text-xs text-slate-600 italic">{forecast.conseil}</p></div>}
+
+          <InteractiveBudgetChart
+            cashflowData={cashflowHistoryData}
+            transactions={transactions}
+            hasFlowData={hasFlowData}
+            onMonthSelect={setFilterMonth}      // Connexion au filtre de mois
+            onCategorySelect={setFilterCategory} // Connexion au filtre de catégorie
           />
         </Card>
         <Card className="flex flex-col relative border-slate-300 h-[560px]"> {/* Hauteur fixe pour éviter l'étirement */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 shrink-0">
             <div className="flex items-center gap-2 flex-1">
-              <List size={20} className="text-blue-600 shrink-0"/> 
+              <List size={20} className="text-blue-600 shrink-0" />
               <span className="leading-tight text-lg font-bold text-slate-800">Dernières Opérations</span>
               {(filterMonth || filterCategory || searchQuery) && (
                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md border border-indigo-100">
                   Filtré
                 </span>
               )}
-              
+
               <div className="ml-auto flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                <button 
-                  onClick={() => setTxViewMode('list')} 
+                <button
+                  onClick={() => setTxViewMode('list')}
                   className={`p-1.5 rounded-md transition-all flex items-center justify-center ${txViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                   title="Vue Liste"
                 >
                   <List size={14} />
                 </button>
-                <button 
-                  onClick={() => { setTxViewMode('calendar'); window.dispatchEvent(new Event('close-tour')); }} 
+                <button
+                  onClick={() => { setTxViewMode('calendar'); window.dispatchEvent(new Event('close-tour')); }}
                   className={`tour-calendar-btn p-1.5 rounded-md transition-all flex items-center justify-center ${txViewMode === 'calendar' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                   title="Vue Calendrier"
                 >
@@ -2579,8 +2587,8 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
                 </button>
               </div>
 
-              <button 
-                onClick={() => { setIsSearchOpen(!isSearchOpen); if(isSearchOpen) setSearchQuery(''); }}
+              <button
+                onClick={() => { setIsSearchOpen(!isSearchOpen); if (isSearchOpen) setSearchQuery(''); }}
                 className={`ml-2 p-1.5 rounded-lg transition-all border ${isSearchOpen ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-blue-600'}`}
               >
                 <Search size={16} />
@@ -2596,7 +2604,7 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
             <div className="mb-4 animate-in slide-in-from-top duration-200">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
+                <input
                   type="text"
                   placeholder="Rechercher par nom ou date YYYY-MM-DD..."
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
@@ -2611,9 +2619,9 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
           {/* Zone de contenu défilante */}
           <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
             {txViewMode === 'calendar' ? (
-              <TransactionCalendar 
-                transactions={allFilteredTransactions} 
-                filterMonth={filterMonth} 
+              <TransactionCalendar
+                transactions={allFilteredTransactions}
+                filterMonth={filterMonth}
                 onDayClick={(dateStr) => {
                   setSearchQuery(dateStr);
                   setIsSearchOpen(true);
@@ -2622,73 +2630,73 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
               />
             ) : (
               <div className="space-y-2">
-              {(!displayTransactions || displayTransactions.length === 0) ? (
-                <div className="p-10 text-center text-slate-400 italic text-sm">Aucune opération trouvée</div>
-              ) : (
-                <>
-                  {displayTransactions.map(t => (
-                    <div 
-                      key={t.id} 
-                      className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-200 group cursor-pointer"
-                      onClick={() => setFocusedTxId(focusedTxId === t.id ? null : t.id)}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`p-2 rounded-full shrink-0 ${t.type === 'income' ? 'bg-green-100 text-green-600' : t.type === 'transfer' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
-                          {t.type === 'income' ? <ArrowUpRight size={14} /> : t.type === 'transfer' ? <ArrowRight size={14} /> : <ArrowDownRight size={14} />}
-                        </div>
-                        <div className="min-w-0 truncate">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <p className="font-bold text-slate-800 text-sm truncate">{t.label}</p>
-                            {(() => {
-                              const asset = assets?.find(a => a.id.toString() === (t.linkedAssetId || t.fromId || t.toId)?.toString());
-                              if (asset) {
-                                return (
-                                  <span className="flex items-center gap-1 text-[8px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-tight shrink-0">
-                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[asset.type] || '#cbd5e1' }} />
-                                    {asset.name}
-                                  </span>
-                                );
-                              }
-                              return (
-                                <div title="Vous n'avez pas défini de compte pour cette opération." className="flex items-center gap-1 text-red-500 cursor-help shrink-0">
-                                  <AlertCircle size={14} />
-                                  <span className="text-[9px] font-bold uppercase md:hidden">Aucun compte</span>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-[10px] text-slate-500">{new Date(t.date).toLocaleDateString()}</p>
-                            {new Date(t.date) > new Date() && (
-                              <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className={`font-bold text-sm ${t.type === 'income' ? 'text-green-600' : t.type === 'transfer' ? 'text-blue-600' : 'text-slate-800'}`}>
-                          {t.type === 'income' ? '+' : t.type === 'transfer' ? '' : '-'}{formatCurrency(t.amount)}
-                        </p>
-                        {t.category && <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{t.category}</p>}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Bouton Charger plus - Apparaît si il reste des transactions cachées */}
-                  {allFilteredTransactions.length > visibleCount && (
-                    <div className="py-4 flex justify-center">
-                      <Button 
-                        variant="secondary" 
-                        onClick={() => setVisibleCount(prev => prev + 20)}
-                        className="text-xs font-bold w-full sm:w-auto border-slate-200"
+                {(!displayTransactions || displayTransactions.length === 0) ? (
+                  <div className="p-10 text-center text-slate-400 italic text-sm">Aucune opération trouvée</div>
+                ) : (
+                  <>
+                    {displayTransactions.map(t => (
+                      <div
+                        key={t.id}
+                        className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-200 group cursor-pointer"
+                        onClick={() => setFocusedTxId(focusedTxId === t.id ? null : t.id)}
                       >
-                        Charger plus d'opérations
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`p-2 rounded-full shrink-0 ${t.type === 'income' ? 'bg-green-100 text-green-600' : t.type === 'transfer' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                            {t.type === 'income' ? <ArrowUpRight size={14} /> : t.type === 'transfer' ? <ArrowRight size={14} /> : <ArrowDownRight size={14} />}
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <p className="font-bold text-slate-800 text-sm truncate">{t.label}</p>
+                              {(() => {
+                                const asset = assets?.find(a => a.id.toString() === (t.linkedAssetId || t.fromId || t.toId)?.toString());
+                                if (asset) {
+                                  return (
+                                    <span className="flex items-center gap-1 text-[8px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-tight shrink-0">
+                                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[asset.type] || '#cbd5e1' }} />
+                                      {asset.name}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <div title="Vous n'avez pas défini de compte pour cette opération." className="flex items-center gap-1 text-red-500 cursor-help shrink-0">
+                                    <AlertCircle size={14} />
+                                    <span className="text-[9px] font-bold uppercase md:hidden">Aucun compte</span>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[10px] text-slate-500">{new Date(t.date).toLocaleDateString()}</p>
+                              {new Date(t.date) > new Date() && (
+                                <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`font-bold text-sm ${t.type === 'income' ? 'text-green-600' : t.type === 'transfer' ? 'text-blue-600' : 'text-slate-800'}`}>
+                            {t.type === 'income' ? '+' : t.type === 'transfer' ? '' : '-'}{formatCurrency(t.amount)}
+                          </p>
+                          {t.category && <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{t.category}</p>}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Bouton Charger plus - Apparaît si il reste des transactions cachées */}
+                    {allFilteredTransactions.length > visibleCount && (
+                      <div className="py-4 flex justify-center">
+                        <Button
+                          variant="secondary"
+                          onClick={() => setVisibleCount(prev => prev + 20)}
+                          className="text-xs font-bold w-full sm:w-auto border-slate-200"
+                        >
+                          Charger plus d'opérations
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
         </Card>
@@ -2699,7 +2707,7 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
 
 // ... AssetsView, BudgetView, AiAdvisorView remain largely the same, skipped for brevity but would be here ...
 
-const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset }) => {
+const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) => {
   // Ajoutez ceci au tout début :
   if (assets === null) {
     return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -2719,16 +2727,16 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset }) => {
 
     const isComposite = isCompositeType(newAsset.type);
     const today = new Date().toISOString().split('T')[0];
-    
+
     // Si c'est un compte Bourse/Investissement, on crée la poche Cash (Espèces)
     // Elle aura 'isCash: true' pour être identifiée par nos nouveaux KPI et filtres
     const initialPositions = isComposite ? [
-      { 
-        id: 'cash_pouch', 
-        name: '💰 Espèces', 
-        value: 0, 
-        isCash: true, 
-        history: [{ date: today, value: 0 }] 
+      {
+        id: 'cash_pouch',
+        name: '💰 Espèces',
+        value: 0,
+        isCash: true,
+        history: [{ date: today, value: 0 }]
       }
     ] : [];
 
@@ -2736,18 +2744,18 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset }) => {
     // Pour un Livret, on prend la valeur saisie dans le formulaire
     const initialValue = isComposite ? 0 : (parseFloat(newAsset.value) || 0);
 
-    const newAssetObj = { 
-      ...newAsset, 
-      id: Date.now(), 
-      value: initialValue, 
+    const newAssetObj = {
+      ...newAsset,
+      id: Date.now(),
+      value: initialValue,
       positions: initialPositions,
-      history: [{ date: today, value: initialValue }] 
+      history: [{ date: today, value: initialValue }]
     };
 
     // Mise à jour de l'état local et sauvegarde en base de données
     const updatedAssets = [...(assets || []), newAssetObj];
     setAssets(updatedAssets);
-    
+
     // Réinitialisation du formulaire
     setNewAsset({ name: '', institution: '', value: '', type: 'liquidite' });
     setIsFormOpen(false);
@@ -2777,13 +2785,13 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset }) => {
         ];
       }
     }
-    
+
     // NOUVEAU : Exclusivité du compte principal
     let newAssets = [...assets];
     if (updatedAsset.isPrimary) {
-       newAssets = newAssets.map(a => ({ ...a, isPrimary: false }));
+      newAssets = newAssets.map(a => ({ ...a, isPrimary: false }));
     }
-    
+
     setAssets(newAssets.map(a => a.id === updatedAsset.id ? updatedAsset : a));
     setSelectedAsset(updatedAsset);
   };
@@ -2791,63 +2799,64 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset }) => {
 
   return (
     <div className="space-y-6 animate-in slide-in-from-right duration-300 text-slate-900 pb-24 md:pb-8">
+      {userId && <BankSyncDashboard userId={userId} />}
       <ConfirmationModal isOpen={!!assetToDelete} onClose={() => setAssetToDelete(null)} onConfirm={() => { handleDelete(assetToDelete); setAssetToDelete(null); }} message="Supprimer ce compte ?" />
       {selectedAsset && (<AssetDetailOverlay key={selectedAsset.id} asset={selectedAsset} onClose={() => setSelectedAsset(null)} onUpdate={handleUpdateAsset} transactions={transactions} />)}
-      {(!assets || assets.length === 0) ? (<EmptyState title="Aucun actif" description="Ajoutez votre premier compte." actionLabel="Ajouter" onAction={() => { setIsFormOpen(true); window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); }} icon={Wallet} actionClassName={!isFormOpen ? "tour-add-asset" : ""} />) : (<div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Mes Actifs</h2><Button onClick={() => { setIsFormOpen(!isFormOpen); if(!isFormOpen) { window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); } }} variant={isFormOpen ? "secondary" : "primary"} className={`${!isFormOpen ? 'tour-add-asset' : ''} transition-all duration-300 min-w-[120px]`}>{isFormOpen ? <><X size={20} /> Annuler</> : <><PlusCircle size={20} /> Ajouter</>}</Button></div>)}
+      {(!assets || assets.length === 0) ? (<EmptyState title="Aucun actif" description="Ajoutez votre premier compte." actionLabel="Ajouter" onAction={() => { setIsFormOpen(true); window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); }} icon={Wallet} actionClassName={!isFormOpen ? "tour-add-asset" : ""} />) : (<div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Mes Actifs</h2><Button onClick={() => { setIsFormOpen(!isFormOpen); if (!isFormOpen) { window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); } }} variant={isFormOpen ? "secondary" : "primary"} className={`${!isFormOpen ? 'tour-add-asset' : ''} transition-all duration-300 min-w-[120px]`}>{isFormOpen ? <><X size={20} /> Annuler</> : <><PlusCircle size={20} /> Ajouter</>}</Button></div>)}
       {isFormOpen && (
         <Card className="bg-blue-50 border-blue-100 animate-in slide-in-from-top-4 fade-in duration-300 origin-top">
-          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end"><div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Type</label><select className="tour-asset-form-type w-full p-2 rounded-lg border border-slate-300" value={newAsset.type} onChange={(e) => setNewAsset({...newAsset, type: e.target.value})}>{Object.keys(CATEGORY_LABELS).map(key => (<option key={key} value={key}>{CATEGORY_LABELS[key]}</option>))}</select></div><div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Nom</label><input type="text" autoFocus className="w-full p-2 rounded-lg border border-slate-300" value={newAsset.name} onChange={(e) => setNewAsset({...newAsset, name: e.target.value})} /></div><div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Banque</label><input type="text" className="w-full p-2 rounded-lg border border-slate-300" value={newAsset.institution} onChange={(e) => setNewAsset({...newAsset, institution: e.target.value})} /></div>{isCompositeType(newAsset.type) ? <div className="lg:col-span-1 pb-2 text-center text-xs text-slate-500 italic">Valeur auto</div> : <div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Valeur</label><input type="number" className="w-full p-2 rounded-lg border border-slate-300" value={newAsset.value} onChange={(e) => setNewAsset({...newAsset, value: e.target.value})} /></div>}<Button type="submit" className="tour-asset-form-submit w-full">Ajouter</Button></form>
+          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end"><div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Type</label><select className="tour-asset-form-type w-full p-2 rounded-lg border border-slate-300" value={newAsset.type} onChange={(e) => setNewAsset({ ...newAsset, type: e.target.value })}>{Object.keys(CATEGORY_LABELS).map(key => (<option key={key} value={key}>{CATEGORY_LABELS[key]}</option>))}</select></div><div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Nom</label><input type="text" autoFocus className="w-full p-2 rounded-lg border border-slate-300" value={newAsset.name} onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })} /></div><div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Banque</label><input type="text" className="w-full p-2 rounded-lg border border-slate-300" value={newAsset.institution} onChange={(e) => setNewAsset({ ...newAsset, institution: e.target.value })} /></div>{isCompositeType(newAsset.type) ? <div className="lg:col-span-1 pb-2 text-center text-xs text-slate-500 italic">Valeur auto</div> : <div className="lg:col-span-1"><label className="block text-xs font-semibold text-slate-600 mb-1">Valeur</label><input type="number" className="w-full p-2 rounded-lg border border-slate-300" value={newAsset.value} onChange={(e) => setNewAsset({ ...newAsset, value: e.target.value })} /></div>}<Button type="submit" className="tour-asset-form-submit w-full">Ajouter</Button></form>
         </Card>
       )}
       <div className="grid gap-6">{Object.keys(groupedAssets).map(type => (<Card key={type} className="overflow-hidden border-slate-200 p-0 md:p-0"><div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-700 flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[type] }}></span>{CATEGORY_LABELS[type]}</h3><span className="font-bold text-slate-900">{formatCurrency(groupedAssets[type].reduce((sum, a) => sum + a.value, 0))}</span></div><div className="divide-y divide-slate-100">{groupedAssets[type].map(asset => (
-        <div 
-              key={asset.id} 
-              className="p-5 md:p-4 flex justify-between items-center hover:bg-slate-50 transition group border-b border-slate-50 last:border-0 cursor-pointer"
-              onClick={() => setFocusedAssetId(focusedAssetId === asset.id ? null : asset.id)}
-            >
-              <div className="flex items-center gap-4 overflow-hidden min-w-0">
-                <div className="bg-slate-100 p-2 rounded-lg text-slate-500 flex-shrink-0">
-                  {(() => {
-                    const IconComponent = (ASSET_ICON_OPTIONS[asset.icon] || ASSET_ICON_OPTIONS['building']).icon;
-                    return <IconComponent size={20} />;
-                  })()}
-                </div>
-                <div className="min-w-0 truncate">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <p className="font-semibold text-slate-800 truncate">{asset.name}</p>
-                    {asset.isPrimary && (
-                      <div className="text-amber-400 shrink-0" title="Compte principal">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-sm text-slate-500 truncate">{asset.institution}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 flex-shrink-0"><span className="font-bold text-slate-700">{formatCurrency(asset.value)}</span>
-              <div className={`tour-asset-row-actions ${focusedAssetId === asset.id ? 'flex' : 'hidden md:group-hover:flex'} gap-1 transition-all`}>
-                <button 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    setSelectedAsset(asset); 
-                    window.dispatchEvent(new CustomEvent('tour-asset-detail', { detail: { isComposite: isCompositeType(asset.type) } })); 
-                    window.dispatchEvent(new Event('close-tour'));
-                  }} 
-                  className="tour-asset-eye bg-blue-50 text-blue-600 p-2 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <Eye size={18} />
-                </button>
-                <button 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    setAssetToDelete(asset.id); 
-                  }} 
-                  className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div></div>
+        <div
+          key={asset.id}
+          className="p-5 md:p-4 flex justify-between items-center hover:bg-slate-50 transition group border-b border-slate-50 last:border-0 cursor-pointer"
+          onClick={() => setFocusedAssetId(focusedAssetId === asset.id ? null : asset.id)}
+        >
+          <div className="flex items-center gap-4 overflow-hidden min-w-0">
+            <div className="bg-slate-100 p-2 rounded-lg text-slate-500 flex-shrink-0">
+              {(() => {
+                const IconComponent = (ASSET_ICON_OPTIONS[asset.icon] || ASSET_ICON_OPTIONS['building']).icon;
+                return <IconComponent size={20} />;
+              })()}
             </div>
+            <div className="min-w-0 truncate">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <p className="font-semibold text-slate-800 truncate">{asset.name}</p>
+                {asset.isPrimary && (
+                  <div className="text-amber-400 shrink-0" title="Compte principal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-slate-500 truncate">{asset.institution}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 flex-shrink-0"><span className="font-bold text-slate-700">{formatCurrency(asset.value)}</span>
+            <div className={`tour-asset-row-actions ${focusedAssetId === asset.id ? 'flex' : 'hidden md:group-hover:flex'} gap-1 transition-all`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedAsset(asset);
+                  window.dispatchEvent(new CustomEvent('tour-asset-detail', { detail: { isComposite: isCompositeType(asset.type) } }));
+                  window.dispatchEvent(new Event('close-tour'));
+                }}
+                className="tour-asset-eye bg-blue-50 text-blue-600 p-2 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                <Eye size={18} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAssetToDelete(asset.id);
+                }}
+                className="bg-red-50 text-red-600 p-2 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div></div>
+        </div>
       ))}</div></Card>))}</div>
     </div>
   );
@@ -2871,8 +2880,8 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
     if (filterCategory) result = result.filter(t => t.category === filterCategory);
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(t => 
-        t.label.toLowerCase().includes(query) || 
+      result = result.filter(t =>
+        t.label.toLowerCase().includes(query) ||
         t.date.includes(query)
       );
     }
@@ -2897,9 +2906,9 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
   const [focusedTxId, setFocusedTxId] = useState(null);
 
   const cashflowHistoryData = useMemo(() => processFlowData(timeRange, transactions), [timeRange, transactions]);
-  
-  const selectableAccounts = useMemo(() => 
-    assets ? assets.filter(a => ['liquidite', 'investissement', 'epargne_salariale', 'crypto'].includes(a.type)) : [], 
+
+  const selectableAccounts = useMemo(() =>
+    assets ? assets.filter(a => ['liquidite', 'investissement', 'epargne_salariale', 'crypto'].includes(a.type)) : [],
     [assets]
   );
   const hasFlowData = useMemo(() => cashflowHistoryData.some(d => d.revenus > 0 || d.depenses > 0), [cashflowHistoryData]);
@@ -2907,14 +2916,14 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
   const handleAdd = (e) => {
     e.preventDefault();
     if (!newTrans.label || !newTrans.amount) return;
-    
+
     const finalDate = newTrans.date ? newTrans.date : new Date().toISOString().split('T')[0];
 
-    const transaction = { 
-      ...newTrans, 
-      date: finalDate, 
-      id: editId || Date.now(), 
-      amount: parseFloat(newTrans.amount) 
+    const transaction = {
+      ...newTrans,
+      date: finalDate,
+      id: editId || Date.now(),
+      amount: parseFloat(newTrans.amount)
     };
 
     if (newTrans.type === 'transfer') {
@@ -2926,42 +2935,42 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
     }
 
     if (editId) {
-        onUpdateTransaction(transaction);
-        setEditId(null);
+      onUpdateTransaction(transaction);
+      setEditId(null);
     } else {
-        onAddTransaction(transaction, selectedAccount);
+      onAddTransaction(transaction, selectedAccount);
     }
-    
+
     setNewTrans({ date: new Date().toISOString().split('T')[0], label: '', amount: '', type: 'expense', category: 'Autre' });
     setSelectedAccount('');
     setTransferTo('');
   };
 
   const startEdit = (t) => {
-      setEditId(t.id);
-      setNewTrans({ date: t.date, label: t.label, amount: t.amount, type: t.type, category: t.category });
-      if (t.type === 'transfer') {
-          setSelectedAccount(t.fromId || '');
-          setTransferTo(t.toId || '');
-      } else {
-          setSelectedAccount(t.linkedAssetId || '');
-          setTransferTo('');
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    setEditId(t.id);
+    setNewTrans({ date: t.date, label: t.label, amount: t.amount, type: t.type, category: t.category });
+    if (t.type === 'transfer') {
+      setSelectedAccount(t.fromId || '');
+      setTransferTo(t.toId || '');
+    } else {
+      setSelectedAccount(t.linkedAssetId || '');
+      setTransferTo('');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelEdit = () => {
-      setEditId(null);
-      setNewTrans({ date: new Date().toISOString().split('T')[0], label: '', amount: '', type: 'expense', category: 'Autre' });
-      setSelectedAccount('');
-      setTransferTo('');
+    setEditId(null);
+    setNewTrans({ date: new Date().toISOString().split('T')[0], label: '', amount: '', type: 'expense', category: 'Autre' });
+    setSelectedAccount('');
+    setTransferTo('');
   };
 
   const handleAiParse = async () => {
     if (!aiInput) return;
     setIsAiProcessing(true);
     const accountNames = selectableAccounts.map(a => a.name).join(', ');
-    
+
     // NOUVEAU : Identification du compte principal
     const primaryAccount = selectableAccounts.find(a => a.isPrimary);
     const primaryAccountInfo = primaryAccount ? `\n    - Compte principal par défaut : "${primaryAccount.name}". Si l'utilisateur ne précise AUCUN compte dans sa phrase, tu DOIS obligatoirement renvoyer "accountName": "${primaryAccount.name}".` : '';
@@ -2998,9 +3007,9 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
   `;
     try {
       const resultText = await callGeminiAPI("Extraction transaction JSON.", [], userPrompt);
-      
+
       const jsonMatch = resultText.match(/\{[\s\S]*\}/);
-      
+
       if (!jsonMatch) {
         alert("L'assistant n'a pas pu créer la transaction. Message : " + resultText);
         setIsAiProcessing(false);
@@ -3008,14 +3017,14 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
       }
 
       const data = JSON.parse(jsonMatch[0]);
-      setNewTrans({ 
-        date: data.date || new Date().toISOString().split('T')[0], 
-        label: data.label || '', 
-        amount: data.amount || '', 
-        type: data.type || 'expense', 
-        category: data.category || 'Autre' 
+      setNewTrans({
+        date: data.date || new Date().toISOString().split('T')[0],
+        label: data.label || '',
+        amount: data.amount || '',
+        type: data.type || 'expense',
+        category: data.category || 'Autre'
       });
-      
+
       if (data.type === 'transfer') {
         if (data.accountFrom) {
           const foundFrom = selectableAccounts.find(a => a.name.toLowerCase() === data.accountFrom.toLowerCase());
@@ -3042,46 +3051,46 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in slide-in-from-right duration-300 text-slate-900 pb-24 md:pb-8">
       <div className="lg:col-span-1 space-y-6">
         <Card className="tour-ai-input bg-slate-50/50 border-indigo-200"><h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Sparkles size={18} className="text-indigo-600" /> Saisie Rapide IA</h3><p className="text-xs text-indigo-700 mb-3">Ex: "Virement de 100€ du Livret A vers Compte Courant hier" ou "McDo 15€"</p><div className="flex gap-2"><input type="text" className="flex-1 p-2 text-sm rounded-lg border border-indigo-200" value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAiParse()} /><button onClick={handleAiParse} disabled={isAiProcessing || !aiInput} className="bg-indigo-600 text-white p-2 rounded-lg">{isAiProcessing ? <Loader2 size={18} className="animate-spin" /> : <Wand2 size={18} />}</button></div></Card>
-        <Card className="tour-budget-manual-form sticky top-6 bg-slate-50/50 border-slate-200"><h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">{editId ? <Edit size={20} className="text-blue-600"/> : <PlusCircle size={20} />} {editId ? "Modifier l'opération" : "Nouvelle Opération"}</h3><form onSubmit={handleAdd} className="space-y-4"><div><label className="block text-xs font-semibold text-slate-600 mb-1">Type</label><div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setNewTrans({...newTrans, type: 'expense'})} className={`py-2 rounded-lg text-xs font-medium ${newTrans.type === 'expense' ? 'bg-red-100 text-red-700' : 'bg-white border border-slate-200'}`}>Dépense</button><button type="button" onClick={() => setNewTrans({...newTrans, type: 'income'})} className={`py-2 rounded-lg text-xs font-medium ${newTrans.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200'}`}>Revenu</button><button type="button" onClick={() => setNewTrans({...newTrans, type: 'transfer'})} className={`py-2 rounded-lg text-xs font-medium ${newTrans.type === 'transfer' ? 'bg-blue-100 text-blue-700' : 'bg-white border border-slate-200'}`}>Virement</button></div></div>
-        
-        <div><label className="block text-xs font-semibold text-slate-600 mb-1">{newTrans.type === 'transfer' ? "Compte Débité (Source)" : "Compte (Optionnel)"}</label><select className="w-full p-2 rounded-lg border border-slate-300" value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}><option value="">-- Aucun --</option>{selectableAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-        
-        {newTrans.type === 'transfer' && (
-          <div><label className="block text-xs font-semibold text-slate-600 mb-1">Compte Crédité (Destination)</label><select className="w-full p-2 rounded-lg border border-slate-300" value={transferTo} onChange={(e) => setTransferTo(e.target.value)}><option value="">-- Aucun --</option>{selectableAccounts.filter(a => a.id != selectedAccount).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-        )}
-        
-        <div><label className="block text-xs font-semibold text-slate-600 mb-1">Montant</label><input type="number" className="w-full p-2 rounded-lg border border-slate-300" value={newTrans.amount} onChange={(e) => setNewTrans({...newTrans, amount: e.target.value})} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">Libellé</label><input type="text" className="w-full p-2 rounded-lg border border-slate-300" value={newTrans.label} onChange={(e) => setNewTrans({...newTrans, label: e.target.value})} /></div>
-        
-        {/* CATEGORY SELECTOR FOR EXPENSES */}
-        {newTrans.type === 'expense' && (
+        <Card className="tour-budget-manual-form sticky top-6 bg-slate-50/50 border-slate-200"><h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">{editId ? <Edit size={20} className="text-blue-600" /> : <PlusCircle size={20} />} {editId ? "Modifier l'opération" : "Nouvelle Opération"}</h3><form onSubmit={handleAdd} className="space-y-4"><div><label className="block text-xs font-semibold text-slate-600 mb-1">Type</label><div className="grid grid-cols-3 gap-2"><button type="button" onClick={() => setNewTrans({ ...newTrans, type: 'expense' })} className={`py-2 rounded-lg text-xs font-medium ${newTrans.type === 'expense' ? 'bg-red-100 text-red-700' : 'bg-white border border-slate-200'}`}>Dépense</button><button type="button" onClick={() => setNewTrans({ ...newTrans, type: 'income' })} className={`py-2 rounded-lg text-xs font-medium ${newTrans.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200'}`}>Revenu</button><button type="button" onClick={() => setNewTrans({ ...newTrans, type: 'transfer' })} className={`py-2 rounded-lg text-xs font-medium ${newTrans.type === 'transfer' ? 'bg-blue-100 text-blue-700' : 'bg-white border border-slate-200'}`}>Virement</button></div></div>
+
+          <div><label className="block text-xs font-semibold text-slate-600 mb-1">{newTrans.type === 'transfer' ? "Compte Débité (Source)" : "Compte (Optionnel)"}</label><select className="w-full p-2 rounded-lg border border-slate-300" value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}><option value="">-- Aucun --</option>{selectableAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+
+          {newTrans.type === 'transfer' && (
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1">Compte Crédité (Destination)</label><select className="w-full p-2 rounded-lg border border-slate-300" value={transferTo} onChange={(e) => setTransferTo(e.target.value)}><option value="">-- Aucun --</option>{selectableAccounts.filter(a => a.id != selectedAccount).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+          )}
+
+          <div><label className="block text-xs font-semibold text-slate-600 mb-1">Montant</label><input type="number" className="w-full p-2 rounded-lg border border-slate-300" value={newTrans.amount} onChange={(e) => setNewTrans({ ...newTrans, amount: e.target.value })} /></div><div><label className="block text-xs font-semibold text-slate-600 mb-1">Libellé</label><input type="text" className="w-full p-2 rounded-lg border border-slate-300" value={newTrans.label} onChange={(e) => setNewTrans({ ...newTrans, label: e.target.value })} /></div>
+
+          {/* CATEGORY SELECTOR FOR EXPENSES */}
+          {newTrans.type === 'expense' && (
             <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Catégorie</label>
-                <select 
-                    className="w-full p-2 rounded-lg border border-slate-300" 
-                    value={newTrans.category || 'Autre'} 
-                    onChange={(e) => setNewTrans({...newTrans, category: e.target.value})}
-                >
-                    {Object.keys(EXPENSE_CATEGORIES).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                </select>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Catégorie</label>
+              <select
+                className="w-full p-2 rounded-lg border border-slate-300"
+                value={newTrans.category || 'Autre'}
+                onChange={(e) => setNewTrans({ ...newTrans, category: e.target.value })}
+              >
+                {Object.keys(EXPENSE_CATEGORIES).map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
-        )}
-        
-        <div><label className="block text-xs font-semibold text-slate-600 mb-1">Date</label><input type="date" className="w-full p-2 rounded-lg border border-slate-300" value={newTrans.date} onChange={(e) => setNewTrans({...newTrans, date: e.target.value})} /></div>
-        <div className="flex gap-2">
+          )}
+
+          <div><label className="block text-xs font-semibold text-slate-600 mb-1">Date</label><input type="date" className="w-full p-2 rounded-lg border border-slate-300" value={newTrans.date} onChange={(e) => setNewTrans({ ...newTrans, date: e.target.value })} /></div>
+          <div className="flex gap-2">
             {editId && <Button type="button" variant="secondary" className="flex-1" onClick={cancelEdit}>Annuler</Button>}
             <Button className="flex-1" type="submit">{editId ? "Modifier" : "Enregistrer"}</Button>
-        </div>
+          </div>
         </form></Card>
       </div>
       <div className="lg:col-span-2 space-y-6">
         <ConfirmationModal isOpen={!!transactionToDelete} onClose={() => setTransactionToDelete(null)} onConfirm={() => { onDeleteTransaction(transactionToDelete); setTransactionToDelete(null); }} message="Supprimer cette opération ?" />
-        
+
         <Card className="tour-budget-chart relative border-slate-200">
           <div className="mb-6">
             {/* En-tête : Empilé sur mobile, aligné sur desktop */}
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><ArrowRightLeft size={20} className="text-purple-600"/> Revenus & Dépenses</h3>
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><ArrowRightLeft size={20} className="text-purple-600" /> Revenus & Dépenses</h3>
             <div className="flex items-start gap-2 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
               <div className="bg-blue-100 p-1.5 rounded-full text-blue-600 shrink-0 mt-0.5">
                 <Info size={9} />
@@ -3091,36 +3100,36 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
               </p>
             </div>
           </div>
-             <InteractiveBudgetChart 
-                cashflowData={cashflowHistoryData} 
-                transactions={transactions} 
-                hasFlowData={hasFlowData}
-                onMonthSelect={setFilterMonth}      // Connexion au filtre de mois
-                onCategorySelect={setFilterCategory} // Connexion au filtre de catégorie
-            />
+          <InteractiveBudgetChart
+            cashflowData={cashflowHistoryData}
+            transactions={transactions}
+            hasFlowData={hasFlowData}
+            onMonthSelect={setFilterMonth}      // Connexion au filtre de mois
+            onCategorySelect={setFilterCategory} // Connexion au filtre de catégorie
+          />
         </Card>
 
         <Card className="tour-budget-list flex flex-col relative border-slate-300">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 shrink-0">
             <div className="flex items-center gap-2 flex-1">
-              <List size={20} className="text-blue-600 shrink-0"/> 
+              <List size={20} className="text-blue-600 shrink-0" />
               <span className="leading-tight text-lg font-bold text-slate-800">Dernières Opérations</span>
               {(filterMonth || filterCategory || searchQuery) && (
                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md border border-indigo-100">
                   Filtré
                 </span>
               )}
-              
+
               <div className="ml-auto flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                <button 
-                  onClick={() => setTxViewMode('list')} 
+                <button
+                  onClick={() => setTxViewMode('list')}
                   className={`p-1.5 rounded-md transition-all flex items-center justify-center ${txViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                   title="Vue Liste"
                 >
                   <List size={14} />
                 </button>
-                <button 
-                  onClick={() => { setTxViewMode('calendar'); window.dispatchEvent(new Event('close-tour')); }} 
+                <button
+                  onClick={() => { setTxViewMode('calendar'); window.dispatchEvent(new Event('close-tour')); }}
                   className={`tour-calendar-btn p-1.5 rounded-md transition-all flex items-center justify-center ${txViewMode === 'calendar' ? 'bg-white text-blue-600 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
                   title="Vue Calendrier"
                 >
@@ -3129,8 +3138,8 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
               </div>
 
               {/* Bouton Loupe */}
-              <button 
-                onClick={() => { setIsSearchOpen(!isSearchOpen); if(isSearchOpen) setSearchQuery(''); }}
+              <button
+                onClick={() => { setIsSearchOpen(!isSearchOpen); if (isSearchOpen) setSearchQuery(''); }}
                 className={`ml-2 p-1.5 rounded-lg transition-all border ${isSearchOpen ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-blue-600'}`}
               >
                 <Search size={16} />
@@ -3143,7 +3152,7 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
             <div className="mb-6 animate-in slide-in-from-top duration-200 px-1">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
+                <input
                   type="text"
                   placeholder="Rechercher par nom ou date YYYY-MM-DD..."
                   className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
@@ -3159,12 +3168,12 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
               </div>
             </div>
           )}
-          
+
           <div className="max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
             {txViewMode === 'calendar' ? (
-              <TransactionCalendar 
-                transactions={allFilteredTransactions} 
-                filterMonth={filterMonth} 
+              <TransactionCalendar
+                transactions={allFilteredTransactions}
+                filterMonth={filterMonth}
                 onDayClick={(dateStr) => {
                   setSearchQuery(dateStr);
                   setIsSearchOpen(true);
@@ -3174,79 +3183,79 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
             ) : (
               <div className="divide-y divide-slate-100">
                 {displayTransactions.length === 0 ? (
-              <div className="p-10 text-center text-slate-400 italic">
-                Aucune transaction pour les filtres sélectionnés.
-              </div>
-            ) : (
-              <>
-                {displayTransactions.map(t => (
-                  <div 
-                    key={t.id} 
-                    className={`p-4 md:p-3 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer group ${editId === t.id ? 'bg-blue-50 border-l-4 border-blue-600' : ''}`}
-                    onClick={() => setFocusedTxId(focusedTxId === t.id ? null : t.id)}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden min-w-0">
-                      <div className={`p-2 rounded-full flex-shrink-0 ${t.type === 'income' ? 'bg-green-100 text-green-600' : t.type === 'transfer' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
-                        {t.type === 'income' ? <ArrowUpRight size={14} /> : t.type === 'transfer' ? <ArrowRight size={14} /> : <ArrowDownRight size={14} />}
-                      </div>
-                      <div className="min-w-0 truncate">
-                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                        <p className="font-bold text-slate-800 text-sm truncate">{t.label}</p>
-                        {(() => {
-                          const asset = assets?.find(a => a.id.toString() === (t.linkedAssetId || t.fromId || t.toId)?.toString());
-                          if (asset) {
-                            return (
-                              <span className="flex items-center gap-1 text-[8px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-tight shrink-0">
-                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[asset.type] || '#cbd5e1' }} />
-                                {asset.name}
-                              </span>
-                            );
-                          }
-                          return (
-                            <div title="Vous n'avez pas défini de compte pour cette opération" className="flex items-center gap-1 text-red-500 cursor-help shrink-0" >
-                              <AlertCircle size={14} />
-                              <span className="text-[9px] font-bold uppercase md:hidden">Aucun compte</span>
+                  <div className="p-10 text-center text-slate-400 italic">
+                    Aucune transaction pour les filtres sélectionnés.
+                  </div>
+                ) : (
+                  <>
+                    {displayTransactions.map(t => (
+                      <div
+                        key={t.id}
+                        className={`p-4 md:p-3 flex items-center justify-between hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer group ${editId === t.id ? 'bg-blue-50 border-l-4 border-blue-600' : ''}`}
+                        onClick={() => setFocusedTxId(focusedTxId === t.id ? null : t.id)}
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden min-w-0">
+                          <div className={`p-2 rounded-full flex-shrink-0 ${t.type === 'income' ? 'bg-green-100 text-green-600' : t.type === 'transfer' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>
+                            {t.type === 'income' ? <ArrowUpRight size={14} /> : t.type === 'transfer' ? <ArrowRight size={14} /> : <ArrowDownRight size={14} />}
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <p className="font-bold text-slate-800 text-sm truncate">{t.label}</p>
+                              {(() => {
+                                const asset = assets?.find(a => a.id.toString() === (t.linkedAssetId || t.fromId || t.toId)?.toString());
+                                if (asset) {
+                                  return (
+                                    <span className="flex items-center gap-1 text-[8px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-tight shrink-0">
+                                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[asset.type] || '#cbd5e1' }} />
+                                      {asset.name}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <div title="Vous n'avez pas défini de compte pour cette opération" className="flex items-center gap-1 text-red-500 cursor-help shrink-0" >
+                                    <AlertCircle size={14} />
+                                    <span className="text-[9px] font-bold uppercase md:hidden">Aucun compte</span>
+                                  </div>
+                                );
+                              })()}
                             </div>
-                          );
-                        })()}
+                            <div className="flex gap-2 items-center">
+                              <p className="text-[10px] text-slate-500">{new Date(t.date).toLocaleDateString()}</p>
+                              {new Date(t.date) > new Date() && (
+                                <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="text-right flex flex-col items-end">
+                            <p className={`font-bold text-sm ${t.type === 'income' ? 'text-green-600' : t.type === 'transfer' ? 'text-blue-600' : 'text-slate-800'}`}>
+                              {t.type === 'income' ? '+' : t.type === 'transfer' ? '' : '-'}{formatCurrency(t.amount)}
+                            </p>
+                            {t.category && <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{t.category}</p>}
+                          </div>
+                          <div className={`${focusedTxId === t.id ? 'flex' : 'hidden md:group-hover:flex'} gap-1 transition-all`}>
+                            <button onClick={(e) => { e.stopPropagation(); startEdit(t); }} className="p-1 text-slate-400 hover:text-blue-600 transition-colors"><Edit size={16} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setTransactionToDelete(t.id); }} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex gap-2 items-center">
-                        <p className="text-[10px] text-slate-500">{new Date(t.date).toLocaleDateString()}</p>
-                        {new Date(t.date) > new Date() && (
-                          <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-bold">Prév.</span>
-                        )}
-                      </div>
-                    </div>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="text-right flex flex-col items-end">
-                        <p className={`font-bold text-sm ${t.type === 'income' ? 'text-green-600' : t.type === 'transfer' ? 'text-blue-600' : 'text-slate-800'}`}>
-                          {t.type === 'income' ? '+' : t.type === 'transfer' ? '' : '-'}{formatCurrency(t.amount)}
-                        </p>
-                        {t.category && <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{t.category}</p>}
-                      </div>
-                      <div className={`${focusedTxId === t.id ? 'flex' : 'hidden md:group-hover:flex'} gap-1 transition-all`}>
-                        <button onClick={(e) => { e.stopPropagation(); startEdit(t); }} className="p-1 text-slate-400 hover:text-blue-600 transition-colors"><Edit size={16} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setTransactionToDelete(t.id); }} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    ))}
 
-                {allFilteredTransactions.length > visibleCount && (
-                  <div className="py-6 flex justify-center">
-                    <Button 
-                      variant="secondary" 
-                      onClick={() => setVisibleCount(prev => prev + 20)}
-                      className="text-xs font-bold w-full border-slate-200"
-                    >
-                      Charger plus d'opérations
-                    </Button>
-                  </div>
+                    {allFilteredTransactions.length > visibleCount && (
+                      <div className="py-6 flex justify-center">
+                        <Button
+                          variant="secondary"
+                          onClick={() => setVisibleCount(prev => prev + 20)}
+                          className="text-xs font-bold w-full border-slate-200"
+                        >
+                          Charger plus d'opérations
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-            </div>
+              </div>
             )}
           </div>
         </Card>
@@ -3257,7 +3266,7 @@ const BudgetView = ({ transactions, assets, onAddTransaction, onDeleteTransactio
 
 const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessages }) => {
   if (assets === null || transactions === null) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-blue-600" /></div>;
-  
+
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -3281,9 +3290,9 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
 
     const displayMessage = label || userMessage;
     const newMessages = [...messages, { role: 'user', content: displayMessage, image: selectedImage }];
-    
-    setMessages(newMessages); 
-    setInput(''); 
+
+    setMessages(newMessages);
+    setInput('');
     const currentImage = selectedImage;
     setSelectedImage(null);
     setIsLoading(true);
@@ -3295,10 +3304,10 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
 
     const age = userProfile?.birthDate ? (new Date().getFullYear() - new Date(userProfile.birthDate).getFullYear()) : 'Non précisé';
     const revenuMensuel = userProfile?.monthlyIncome ? formatCurrency(Number(userProfile.monthlyIncome)) : 'Non précisé';
-    
+
     const detailActifs = assets.map(a => {
       let line = `- ${a.name}: ${formatCurrency(a.value)} (${CATEGORY_LABELS[a.type]})`;
-      
+
       // Calcul des plus-values et PRU pour les comptes d'investissement
       if (a.positions && a.positions.length > 0) {
         const supports = a.positions.filter(p => !p.isCash);
@@ -3306,9 +3315,9 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
         const valeurSupportsActif = supports.reduce((sum, p) => sum + p.value, 0);
         const pvActif = valeurSupportsActif - totalInvestiActif;
         const pvPctActif = totalInvestiActif > 0 ? (pvActif / totalInvestiActif) * 100 : 0;
-        
+
         if (totalInvestiActif > 0) {
-           line += ` | Total investi: ${formatCurrency(totalInvestiActif)} | Plus-value latente: ${pvActif >= 0 ? '+' : ''}${formatCurrency(pvActif)} (${pvPctActif.toFixed(2)}%)`;
+          line += ` | Total investi: ${formatCurrency(totalInvestiActif)} | Plus-value latente: ${pvActif >= 0 ? '+' : ''}${formatCurrency(pvActif)} (${pvPctActif.toFixed(2)}%)`;
         }
 
         const posDetail = a.positions
@@ -3334,20 +3343,20 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
         if (!p.isCash && p.history) {
           p.history.forEach(h => {
             if (h.movementTag === 'buy' || h.movementTag === 'sell') {
-               allInternalMovements.push({
-                 id: h.id || 0,
-                 date: h.date,
-                 assetName: a.name,
-                 posName: p.name,
-                 type: h.movementTag,
-                 amount: h.movementAmount || 0
-               });
+              allInternalMovements.push({
+                id: h.id || 0,
+                date: h.date,
+                assetName: a.name,
+                posName: p.name,
+                type: h.movementTag,
+                amount: h.movementAmount || 0
+              });
             }
           });
         }
       });
     });
-    
+
     // Tri par date décroissante puis par ID pour avoir l'ordre chronologique exact
     allInternalMovements.sort((a, b) => {
       const dateDiff = new Date(b.date) - new Date(a.date);
@@ -3355,7 +3364,7 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
       return dateDiff;
     });
 
-    const mouvementsInternesRecents = allInternalMovements.slice(0, 10).map(m => 
+    const mouvementsInternesRecents = allInternalMovements.slice(0, 10).map(m =>
       `- ${m.date} : ${m.type === 'buy' ? 'ACHAT' : 'VENTE'} de ${m.amount}€ sur ${m.posName} (Compte: ${m.assetName})`
     ).join('\n');
 
@@ -3390,15 +3399,15 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
     `;
 
     try {
-        // On ajoute ton excellente règle dynamiquement au prompt système existant
-        const finalSystemPrompt = systemPrompt + "\n6. CONTINUITÉ : Ne redis pas 'Bonjour' ou de formules de politesse similaires si tu l'as déjà dit dans l'historique. Garde un ton naturel et direct dans la continuité de l'échange.";
-        
-        // On passe 'messages' (l'historique actuel AVANT le nouveau message) à l'API
-        const aiResponse = await callGeminiAPI(finalSystemPrompt, messages, userMessage, currentImage);
-        
-        setMessages([...newMessages, { role: 'assistant', content: aiResponse }]);
-    } catch (e) { 
-        setMessages([...newMessages, { role: 'assistant', content: "Erreur technique. Vérifiez votre connexion." }]); 
+      // On ajoute ton excellente règle dynamiquement au prompt système existant
+      const finalSystemPrompt = systemPrompt + "\n6. CONTINUITÉ : Ne redis pas 'Bonjour' ou de formules de politesse similaires si tu l'as déjà dit dans l'historique. Garde un ton naturel et direct dans la continuité de l'échange.";
+
+      // On passe 'messages' (l'historique actuel AVANT le nouveau message) à l'API
+      const aiResponse = await callGeminiAPI(finalSystemPrompt, messages, userMessage, currentImage);
+
+      setMessages([...newMessages, { role: 'assistant', content: aiResponse }]);
+    } catch (e) {
+      setMessages([...newMessages, { role: 'assistant', content: "Erreur technique. Vérifiez votre connexion." }]);
     }
     setIsLoading(false);
   };
@@ -3412,51 +3421,51 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
             <Sparkles size={16} md:size={18} />
             <span className="text-sm md:text-base">Analyses Flash</span>
           </div>
-          
+
           <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-            <button onClick={() => handleSend("Fais un bilan de santé global de mon patrimoine.", "📊 Bilan de santé global")} 
-                    className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
+            <button onClick={() => handleSend("Fais un bilan de santé global de mon patrimoine.", "📊 Bilan de santé global")}
+              className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
               <Activity size={14} /> Bilan de santé
             </button>
 
-            <button onClick={() => handleSend("Analyse mes dépenses récentes et identifie des économies possibles.", "💸 Analyse des dépenses")} 
-                    className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
+            <button onClick={() => handleSend("Analyse mes dépenses récentes et identifie des économies possibles.", "💸 Analyse des dépenses")}
+              className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
               <ArrowDownRight size={14} /> Analyse dépenses
             </button>
 
-            <button onClick={() => handleSend("Calcule si mon épargne de précaution (liquidités) couvre au moins 4 mois de mes dépenses moyennes.", "🛡️ Sécurité & Précaution")} 
-                    className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
+            <button onClick={() => handleSend("Calcule si mon épargne de précaution (liquidités) couvre au moins 4 mois de mes dépenses moyennes.", "🛡️ Sécurité & Précaution")}
+              className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
               <ShieldCheck size={14} /> Épargne de précaution
             </button>
 
-            <button onClick={() => handleSend("En fonction de mon profil de risque, suggère une meilleure répartition de mon patrimoine.", "📈 Optimiser l'allocation")} 
-                    className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
+            <button onClick={() => handleSend("En fonction de mon profil de risque, suggère une meilleure répartition de mon patrimoine.", "📈 Optimiser l'allocation")}
+              className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
               <Scale size={14} /> Arbitrage & Risque
             </button>
 
-            <button onClick={() => handleSend("Estime ma capacité d'apport pour un projet immobilier sans vider mes comptes d'investissement.", "🏠 Projet Immobilier")} 
-                    className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
+            <button onClick={() => handleSend("Estime ma capacité d'apport pour un projet immobilier sans vider mes comptes d'investissement.", "🏠 Projet Immobilier")}
+              className="flex-shrink-0 lg:w-full text-left p-2.5 md:p-3 rounded-xl bg-white text-xs font-semibold text-slate-700 hover:bg-indigo-600 hover:text-white transition-all shadow-sm border border-indigo-100 flex items-center gap-2">
               <Home size={14} /> Capacité Immobilière
             </button>
           </div>
         </div>
 
         <div className="hidden lg:block p-4 bg-blue-50 rounded-xl border border-blue-100">
-           <p className="text-[10px] text-blue-700 font-bold uppercase mb-1">Status API</p>
-           <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-xs text-blue-900 font-medium">Assistant prêt à l'emploi</span>
-           </div>
+          <p className="text-[10px] text-blue-700 font-bold uppercase mb-1">Status API</p>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-xs text-blue-900 font-medium">Assistant prêt à l'emploi</span>
+          </div>
         </div>
       </div>
 
       {/* Zone de Chat */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-          <h3 className="font-bold text-slate-700 flex items-center gap-2"><Bot size={20} className="text-indigo-600"/> Conseiller MyWealth</h3>
+          <h3 className="font-bold text-slate-700 flex items-center gap-2"><Bot size={20} className="text-indigo-600" /> Conseiller MyWealth</h3>
           <span className="text-[10px] bg-slate-200 px-2 py-1 rounded-full text-slate-600 font-bold">MODE EXPERT</span>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30" ref={scrollRef}>
           {messages.map((msg, idx) => (<MessageBubble key={idx} message={msg} />))}
           {isLoading && (
@@ -3480,31 +3489,31 @@ const AiAdvisorView = ({ assets, transactions, userProfile, messages, setMessage
               ) : (
                 <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-lg border border-slate-200" />
               )}
-              <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm"><X size={12}/></button>
+              <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-sm"><X size={12} /></button>
             </div>
           )}
           <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex items-center gap-2 w-full">
-            <input 
-              type="file" 
-              accept="image/*,application/pdf" 
-              className="hidden" 
-              ref={fileInputRef} 
-              onChange={handleImageChange} 
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImageChange}
             />
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => fileInputRef.current.click()}
               className="tour-ai-upload shrink-0 p-3 text-slate-500 hover:text-indigo-600 bg-slate-50 rounded-xl border border-slate-200 transition-all"
             >
               <Cloud size={20} />
             </button>
-            <input 
-              type="text" 
-              value={input} 
-              onChange={(e) => setInput(e.target.value)} 
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               placeholder="Posez une question..."
               className="tour-ai-chat-input flex-1 min-w-0 p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm md:text-base"
-              disabled={isLoading} 
+              disabled={isLoading}
             />
             <Button variant="magic" disabled={isLoading || (!input.trim() && !selectedImage)} type="submit" className="shrink-0 px-3 py-3 md:px-4 flex items-center justify-center">
               <Send size={18} />
@@ -3524,7 +3533,7 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  
+
   // Nouveaux champs pour inscription
   const [birthDate, setBirthDate] = useState('');
   const [monthlyIncome, setMonthlyIncome] = useState('');
@@ -3557,29 +3566,29 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); 
+    e.preventDefault();
     setError('');
     setSuccess('');
-    
+
     try {
       if (view === 'register') {
         if (!firstName || !lastName) {
           setError("Nom et Prénom requis");
           return;
         }
-          // Validation de la complexité du mot de passe
-          const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
-          if (!passwordRegex.test(password)) {
-            setError("Le mot de passe doit contenir au moins 8 caractères, incluant des lettres et des chiffres.");
-            return;
-          }
-        await onEmailRegister(email, password, { 
-            firstName, 
-            lastName,
-            birthDate,
-            monthlyIncome,
-            financialGoal,
-            riskProfile
+        // Validation de la complexité du mot de passe
+        const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(password)) {
+          setError("Le mot de passe doit contenir au moins 8 caractères, incluant des lettres et des chiffres.");
+          return;
+        }
+        await onEmailRegister(email, password, {
+          firstName,
+          lastName,
+          birthDate,
+          monthlyIncome,
+          financialGoal,
+          riskProfile
         });
       } else if (view === 'login') {
         await onEmailLogin(email, password);
@@ -3620,9 +3629,9 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
               Continuer avec Google
             </Button>
             {error && error.includes("Pop-up") && (
-                <div className="text-xs text-center text-slate-500 mb-2">
-                    Si le pop-up reste blanc, essayez de désactiver vos extensions (AdBlock) ou utilisez un autre navigateur.
-                </div>
+              <div className="text-xs text-center text-slate-500 mb-2">
+                Si le pop-up reste blanc, essayez de désactiver vos extensions (AdBlock) ou utilisez un autre navigateur.
+              </div>
             )}
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
@@ -3632,45 +3641,45 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          
+
           {view === 'register' && (
             <div className="space-y-4 animate-in slide-in-from-left">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Prénom *</label>
+                  <input type="text" className="w-full p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Nom *</label>
+                  <input type="text" className="w-full p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+                </div>
+              </div>
+
+              {/* Optional Financial Profile Fields during Registration */}
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs font-bold text-indigo-600 mb-3 flex items-center gap-1"><Sparkles size={12} /> Personnaliser mon profil (Optionnel)</p>
+                <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Prénom *</label>
-                    <input type="text" className="w-full p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Date Naissance</label>
+                    <input type="date" className="w-full p-2 rounded-lg border border-slate-300 text-sm" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nom *</label>
-                    <input type="text" className="w-full p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Revenu Mensuel</label>
+                    <input type="number" className="w-full p-2 rounded-lg border border-slate-300 text-sm" placeholder="€" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
                   </div>
                 </div>
-                
-                {/* Optional Financial Profile Fields during Registration */}
-                <div className="border-t border-slate-100 pt-3">
-                    <p className="text-xs font-bold text-indigo-600 mb-3 flex items-center gap-1"><Sparkles size={12}/> Personnaliser mon profil (Optionnel)</p>
-                    <div className="grid grid-cols-2 gap-4 mb-3">
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Date Naissance</label>
-                            <input type="date" className="w-full p-2 rounded-lg border border-slate-300 text-sm" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Revenu Mensuel</label>
-                            <input type="number" className="w-full p-2 rounded-lg border border-slate-300 text-sm" placeholder="€" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Objectif Principal</label>
-                        <select className="w-full p-2 rounded-lg border border-slate-300 text-sm bg-white" value={financialGoal} onChange={(e) => setFinancialGoal(e.target.value)}>
-                            <option value="freedom">Liberté Financière</option>
-                            <option value="retirement">Préparer ma Retraite</option>
-                            <option value="real_estate">Projet Immobilier</option>
-                            <option value="safety">Sécurité Financière</option>
-                            <option value="growth">Croissance du capital</option>
-                            <option value="other">Autre</option>
-                        </select>
-                    </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Objectif Principal</label>
+                  <select className="w-full p-2 rounded-lg border border-slate-300 text-sm bg-white" value={financialGoal} onChange={(e) => setFinancialGoal(e.target.value)}>
+                    <option value="freedom">Liberté Financière</option>
+                    <option value="retirement">Préparer ma Retraite</option>
+                    <option value="real_estate">Projet Immobilier</option>
+                    <option value="safety">Sécurité Financière</option>
+                    <option value="growth">Croissance du capital</option>
+                    <option value="other">Autre</option>
+                  </select>
                 </div>
+              </div>
             </div>
           )}
 
@@ -3692,8 +3701,8 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
             </div>
           )}
 
-          {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2 font-medium border border-red-200"><AlertCircle size={16} className="shrink-0"/> <span>{error}</span></div>}
-          {success && <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg flex items-center gap-2"><CheckCircle size={16}/> {success}</div>}
+          {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg flex items-center gap-2 font-medium border border-red-200"><AlertCircle size={16} className="shrink-0" /> <span>{error}</span></div>}
+          {success && <div className="text-green-600 text-sm bg-green-50 p-3 rounded-lg flex items-center gap-2"><CheckCircle size={16} /> {success}</div>}
 
           <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">
             {view === 'register' ? "Créer un compte" : view === 'forgot' ? "Envoyer le lien" : "Se connecter"}
@@ -3707,7 +3716,7 @@ const LoginScreen = ({ onLogin, onEmailLogin, onEmailRegister, onGoogleLogin, on
               <div className="text-slate-600">Pas encore de compte ? <button onClick={() => setView('register')} className="font-bold text-blue-600 hover:underline">S'inscrire</button></div>
             </>
           )}
-          
+
           {(view === 'register' || view === 'forgot') && (
             <button onClick={() => setView('login')} className="text-blue-600 hover:underline flex items-center justify-center gap-1">
               <ChevronLeft size={14} /> Retour à la connexion
@@ -3726,7 +3735,7 @@ const CustomTooltip = ({ continuous, index, step, backProps, closeProps, primary
       <h3 className="text-lg font-bold text-slate-800">{step.title}</h3>
     </div>
     <p className="text-sm text-slate-600 mb-6 leading-relaxed">{step.content}</p>
-    
+
     {/* On masque le footer si l'étape force l'utilisateur à cliquer sur un élément de l'interface */}
     {!step.hideFooter && (
       <div className="flex justify-between items-center">
@@ -3749,58 +3758,58 @@ const TOURS = {
     { target: '.tour-tab-assets', placement: 'bottom', title: '2. Les Actifs', content: "C'est ici que vous pourrez ajouter et gérer vos comptes (Banque, Bourse...).", disableBeacon: true },
     { target: '.tour-tab-budget', placement: 'bottom', title: '3. Le Budget', content: "L'onglet pour suivre vos revenus et dépenses mois par mois.", disableBeacon: true },
     { target: '.tour-tab-advisor', placement: 'bottom', title: '4. Le Conseiller IA', content: "Votre assistant personnel pour optimiser vos finances en un clic.", disableBeacon: true },
-    { target: '.tour-profile', placement: 'bottom-end', title: 'Votre Profil', content: "Plus tard, pensez à configurer vos objectifs ici pour obtenir des conseils sur-mesure !", disableBeacon: true, icon: <User size={24} className="text-indigo-600"/> },
-    { target: '.tour-start-btn', placement: 'bottom', title: 'Passons à la pratique !', content: "Nous allons maintenant ajouter votre premier compte. Cliquez sur ce bouton pour commencer.", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <Wallet size={24} className="text-blue-600"/> }
+    { target: '.tour-profile', placement: 'bottom-end', title: 'Votre Profil', content: "Plus tard, pensez à configurer vos objectifs ici pour obtenir des conseils sur-mesure !", disableBeacon: true, icon: <User size={24} className="text-indigo-600" /> },
+    { target: '.tour-start-btn', placement: 'bottom', title: 'Passons à la pratique !', content: "Nous allons maintenant ajouter votre premier compte. Cliquez sur ce bouton pour commencer.", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <Wallet size={24} className="text-blue-600" /> }
   ],
   assets_add: [
-    { target: '.tour-add-asset', placement: 'bottom', title: 'À vous de jouer !', content: "Créez votre premier compte. Cliquez directement sur ce bouton pour ouvrir le formulaire.", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <PlusCircle size={24} className="text-emerald-500"/> }
+    { target: '.tour-add-asset', placement: 'bottom', title: 'À vous de jouer !', content: "Créez votre premier compte. Cliquez directement sur ce bouton pour ouvrir le formulaire.", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <PlusCircle size={24} className="text-emerald-500" /> }
   ],
   assets_form: [
     { target: '.tour-asset-form-type', placement: 'bottom', title: 'Le type de compte', content: "Choisissez 'Liquidités' pour vos livrets ou comptes courants. Pour la Bourse ou l'Immobilier, l'application calculera automatiquement vos plus-values !", disableBeacon: true },
     { target: '.tour-asset-form-submit', placement: 'top', title: 'Validez la création', content: "Renseignez un nom, une banque et une valeur de départ, puis cliquez ici pour l'ajouter.", disableBeacon: true, spotlightClicks: true, hideFooter: true }
   ],
   assets_eye: [
-    { target: '.tour-asset-eye', placement: 'left', title: 'Voir le détail', content: "Votre compte est créé ! Cliquez sur cet œil pour découvrir comment modifier ses informations ou gérer ses lignes.", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <Eye size={24} className="text-blue-500"/> }
+    { target: '.tour-asset-eye', placement: 'left', title: 'Voir le détail', content: "Votre compte est créé ! Cliquez sur cet œil pour découvrir comment modifier ses informations ou gérer ses lignes.", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <Eye size={24} className="text-blue-500" /> }
   ],
   detail: [
-    { target: '.tour-asset-name', placement: 'bottom-start', title: 'Modifiez à la volée', content: "Cliquez directement sur le nom ou la banque pour les renommer. C'est magique !", disableBeacon: true, icon: <Edit size={24} className="text-purple-600"/> },
+    { target: '.tour-asset-name', placement: 'bottom-start', title: 'Modifiez à la volée', content: "Cliquez directement sur le nom ou la banque pour les renommer. C'est magique !", disableBeacon: true, icon: <Edit size={24} className="text-purple-600" /> },
     { target: '.tour-asset-primary', placement: 'bottom', title: 'Compte Principal', content: "Cliquez sur cette étoile pour définir ce compte par défaut lors de vos saisies rapides de dépenses.", disableBeacon: true },
-    { target: '.tour-asset-value', placement: 'left', title: 'Valorisation Actuelle', content: "Voici le solde total de votre compte en temps réel.", disableBeacon: true, icon: <DollarSign size={24} className="text-emerald-500"/> },
-    { target: '.tour-asset-chart', placement: 'bottom', title: 'Évolution du solde', content: "Suivez visuellement la courbe de croissance de votre actif au fil du temps.", disableBeacon: true, icon: <TrendingUp size={24} className="text-indigo-500"/> },
-    { target: '.tour-asset-update', placement: 'top', title: 'Mise à jour & Historique', content: "Actualisez votre solde en un clic, ou ajoutez un point dans le passé pour recréer l'historique oublié.", disableBeacon: true, icon: <History size={24} className="text-blue-500"/> },
-    { target: '.tour-asset-history', placement: 'top', title: 'Historique Global', content: "Retrouvez ici toutes les transactions et variations de solde de ce compte.", disableBeacon: true, icon: <List size={24} className="text-slate-600"/> },
-    { target: '.tour-asset-ai-tab', placement: 'bottom', title: 'Analyse IA ✨', content: "Basculez sur cet onglet pour obtenir une analyse poussée et des conseils personnalisés sur ce compte précis.", disableBeacon: true, icon: <Sparkles size={24} className="text-amber-500"/> }
+    { target: '.tour-asset-value', placement: 'left', title: 'Valorisation Actuelle', content: "Voici le solde total de votre compte en temps réel.", disableBeacon: true, icon: <DollarSign size={24} className="text-emerald-500" /> },
+    { target: '.tour-asset-chart', placement: 'bottom', title: 'Évolution du solde', content: "Suivez visuellement la courbe de croissance de votre actif au fil du temps.", disableBeacon: true, icon: <TrendingUp size={24} className="text-indigo-500" /> },
+    { target: '.tour-asset-update', placement: 'top', title: 'Mise à jour & Historique', content: "Actualisez votre solde en un clic, ou ajoutez un point dans le passé pour recréer l'historique oublié.", disableBeacon: true, icon: <History size={24} className="text-blue-500" /> },
+    { target: '.tour-asset-history', placement: 'top', title: 'Historique Global', content: "Retrouvez ici toutes les transactions et variations de solde de ce compte.", disableBeacon: true, icon: <List size={24} className="text-slate-600" /> },
+    { target: '.tour-asset-ai-tab', placement: 'bottom', title: 'Analyse IA ✨', content: "Basculez sur cet onglet pour obtenir une analyse poussée et des conseils personnalisés sur ce compte précis.", disableBeacon: true, icon: <Sparkles size={24} className="text-amber-500" /> }
   ],
   detail_composite: [
-    { target: '.tour-asset-name', placement: 'bottom-start', title: 'Modifiez à la volée', content: "Cliquez directement sur le nom ou la banque pour les renommer. C'est magique !", disableBeacon: true, icon: <Edit size={24} className="text-purple-600"/> },
-    { target: '.tour-asset-value', placement: 'left', title: 'Valorisation Actuelle', content: "Voici le solde total de votre compte, incluant vos espèces et vos lignes investies.", disableBeacon: true, icon: <DollarSign size={24} className="text-emerald-500"/> },
-    { target: '.tour-asset-cash', placement: 'bottom', title: 'Cash Disponible', content: "C'est la poche espèces de votre compte, l'argent qui dort et qui est prêt à être investi.", disableBeacon: true, icon: <PiggyBank size={24} className="text-blue-500"/> },
-    { target: '.tour-asset-pru', placement: 'bottom', title: 'Total Versé (PRU)', content: "C'est le montant total que vous avez réellement sorti de votre poche pour investir.", disableBeacon: true, icon: <ArrowDownRight size={24} className="text-slate-500"/> },
-    { target: '.tour-asset-pv', placement: 'bottom', title: 'Plus-Value Latente', content: "Vos gains ou pertes en temps réel par rapport à votre investissement de départ.", disableBeacon: true, icon: <TrendingUp size={24} className="text-green-500"/> },
-    { target: '.tour-asset-add-line', placement: 'right', title: 'Ajouter une ligne', content: "Commencez par créer vos différents supports (actions, ETF, cryptos, biens...).", disableBeacon: true, icon: <PlusCircle size={24} className="text-blue-600"/> },
-    { target: '.tour-asset-movement', placement: 'right', title: 'Mouvement Interne', content: "Une fois vos lignes créées, simulez des achats ou ventes pour déplacer les fonds depuis la poche espèces.", disableBeacon: true, icon: <ArrowRightLeft size={24} className="text-indigo-500"/> },
-    { target: '.tour-asset-lines', placement: 'top', title: 'Lignes Détenues', content: "La liste de tous vos investissements actuels. Cliquez dessus pour voir leur détail complet !", disableBeacon: true, icon: <List size={24} className="text-slate-600"/> },
-    { target: '.tour-asset-history-tab', placement: 'bottom', title: 'Historique', content: "Retrouvez ici le journal de vos opérations et la courbe d'évolution globale du compte.", disableBeacon: true, icon: <History size={24} className="text-blue-500"/> },
-    { target: '.tour-asset-ai-tab', placement: 'bottom', title: 'Analyse IA ✨', content: "L'IA peut analyser vos positions et vous suggérer des arbitrages sur ce compte.", disableBeacon: true, icon: <Sparkles size={24} className="text-amber-500"/> }
+    { target: '.tour-asset-name', placement: 'bottom-start', title: 'Modifiez à la volée', content: "Cliquez directement sur le nom ou la banque pour les renommer. C'est magique !", disableBeacon: true, icon: <Edit size={24} className="text-purple-600" /> },
+    { target: '.tour-asset-value', placement: 'left', title: 'Valorisation Actuelle', content: "Voici le solde total de votre compte, incluant vos espèces et vos lignes investies.", disableBeacon: true, icon: <DollarSign size={24} className="text-emerald-500" /> },
+    { target: '.tour-asset-cash', placement: 'bottom', title: 'Cash Disponible', content: "C'est la poche espèces de votre compte, l'argent qui dort et qui est prêt à être investi.", disableBeacon: true, icon: <PiggyBank size={24} className="text-blue-500" /> },
+    { target: '.tour-asset-pru', placement: 'bottom', title: 'Total Versé (PRU)', content: "C'est le montant total que vous avez réellement sorti de votre poche pour investir.", disableBeacon: true, icon: <ArrowDownRight size={24} className="text-slate-500" /> },
+    { target: '.tour-asset-pv', placement: 'bottom', title: 'Plus-Value Latente', content: "Vos gains ou pertes en temps réel par rapport à votre investissement de départ.", disableBeacon: true, icon: <TrendingUp size={24} className="text-green-500" /> },
+    { target: '.tour-asset-add-line', placement: 'right', title: 'Ajouter une ligne', content: "Commencez par créer vos différents supports (actions, ETF, cryptos, biens...).", disableBeacon: true, icon: <PlusCircle size={24} className="text-blue-600" /> },
+    { target: '.tour-asset-movement', placement: 'right', title: 'Mouvement Interne', content: "Une fois vos lignes créées, simulez des achats ou ventes pour déplacer les fonds depuis la poche espèces.", disableBeacon: true, icon: <ArrowRightLeft size={24} className="text-indigo-500" /> },
+    { target: '.tour-asset-lines', placement: 'top', title: 'Lignes Détenues', content: "La liste de tous vos investissements actuels. Cliquez dessus pour voir leur détail complet !", disableBeacon: true, icon: <List size={24} className="text-slate-600" /> },
+    { target: '.tour-asset-history-tab', placement: 'bottom', title: 'Historique', content: "Retrouvez ici le journal de vos opérations et la courbe d'évolution globale du compte.", disableBeacon: true, icon: <History size={24} className="text-blue-500" /> },
+    { target: '.tour-asset-ai-tab', placement: 'bottom', title: 'Analyse IA ✨', content: "L'IA peut analyser vos positions et vous suggérer des arbitrages sur ce compte.", disableBeacon: true, icon: <Sparkles size={24} className="text-amber-500" /> }
   ],
   budget: [
-    { target: 'body', placement: 'center', title: 'Votre Budget & Flux 💸', content: "Bienvenue dans le centre névralgique de vos finances. C'est ici que vous allez suivre l'évolution de chaque euro gagné ou dépensé.", disableBeacon: true, icon: <ArrowRightLeft size={24} className="text-blue-600"/> },
-    { target: '.tour-budget-manual-form', placement: 'right', title: 'Saisie Manuelle', content: "Ajoutez vos dépenses, revenus ou virements entre comptes en remplissant ce formulaire classique.", disableBeacon: true, icon: <PlusCircle size={24} className="text-emerald-500"/> },
-    { target: '.tour-ai-input', placement: 'bottom', title: 'La Saisie Magique IA 🪄', content: "Encore plus rapide : écrivez simplement 'Courses 50€' ou 'Virement 100€' et l'IA s'occupe de remplir le formulaire pour vous !", disableBeacon: true, icon: <Wand2 size={24} className="text-indigo-600"/> },
-    { target: '.tour-budget-chart', placement: 'left', title: 'Analyse Visuelle', content: "Suivez l'évolution de vos flux. Astuce : cliquez sur une barre rouge pour voir la répartition détaillée de vos dépenses du mois !", disableBeacon: true, icon: <PieIcon size={24} className="text-purple-500"/> },
-    { target: '.tour-budget-list', placement: 'left', title: 'Le Journal', content: "Retrouvez ici tout l'historique de vos opérations avec la possibilité de rechercher, filtrer ou modifier une ligne.", disableBeacon: true, icon: <List size={24} className="text-slate-600"/> },
-    { target: '.tour-calendar-btn', placement: 'left', title: 'La Vue Calendrier 📅', content: "Basculez sur cette vue pour visualiser vos mouvements jour par jour sur un mois entier. Cliquez dessus pour essayer et terminer !", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <CalendarDays size={24} className="text-blue-500"/> }
+    { target: 'body', placement: 'center', title: 'Votre Budget & Flux 💸', content: "Bienvenue dans le centre névralgique de vos finances. C'est ici que vous allez suivre l'évolution de chaque euro gagné ou dépensé.", disableBeacon: true, icon: <ArrowRightLeft size={24} className="text-blue-600" /> },
+    { target: '.tour-budget-manual-form', placement: 'right', title: 'Saisie Manuelle', content: "Ajoutez vos dépenses, revenus ou virements entre comptes en remplissant ce formulaire classique.", disableBeacon: true, icon: <PlusCircle size={24} className="text-emerald-500" /> },
+    { target: '.tour-ai-input', placement: 'bottom', title: 'La Saisie Magique IA 🪄', content: "Encore plus rapide : écrivez simplement 'Courses 50€' ou 'Virement 100€' et l'IA s'occupe de remplir le formulaire pour vous !", disableBeacon: true, icon: <Wand2 size={24} className="text-indigo-600" /> },
+    { target: '.tour-budget-chart', placement: 'left', title: 'Analyse Visuelle', content: "Suivez l'évolution de vos flux. Astuce : cliquez sur une barre rouge pour voir la répartition détaillée de vos dépenses du mois !", disableBeacon: true, icon: <PieIcon size={24} className="text-purple-500" /> },
+    { target: '.tour-budget-list', placement: 'left', title: 'Le Journal', content: "Retrouvez ici tout l'historique de vos opérations avec la possibilité de rechercher, filtrer ou modifier une ligne.", disableBeacon: true, icon: <List size={24} className="text-slate-600" /> },
+    { target: '.tour-calendar-btn', placement: 'left', title: 'La Vue Calendrier 📅', content: "Basculez sur cette vue pour visualiser vos mouvements jour par jour sur un mois entier. Cliquez dessus pour essayer et terminer !", disableBeacon: true, spotlightClicks: true, hideFooter: true, icon: <CalendarDays size={24} className="text-blue-500" /> }
   ],
   advisor: [
-    { target: 'body', placement: 'center', title: 'Votre Conseiller Personnel', content: "L'IA a connaissance de l'intégralité de votre patrimoine, de vos revenus et de vos objectifs. Elle est là pour vous guider sur mesure.", disableBeacon: true, icon: <Bot size={24} className="text-indigo-600"/> },
-    { target: '.tour-ai-flash', placement: 'right', title: 'Analyses Flash', content: "Pas d'inspiration ? Cliquez sur l'un de ces boutons pour lancer une analyse financière complète en un clin d'œil.", disableBeacon: true, icon: <Zap size={24} className="text-amber-500"/> },
-    { target: '.tour-ai-upload', placement: 'top-start', title: 'Analyse de Documents', content: "La vraie magie est ici : envoyez un relevé bancaire, une fiche de paie ou un document SCPI (PDF/Image) pour que l'IA le décrypte pour vous !", disableBeacon: true, icon: <Cloud size={24} className="text-blue-500"/> },
-    { target: '.tour-ai-chat-input', placement: 'top', title: 'À vous de jouer !', content: "Posez votre première question. Par exemple : 'Comment investir 500€ ce mois-ci ?'. C'est à vous !", disableBeacon: true, icon: <MessageSquare size={24} className="text-indigo-600"/> }
+    { target: 'body', placement: 'center', title: 'Votre Conseiller Personnel', content: "L'IA a connaissance de l'intégralité de votre patrimoine, de vos revenus et de vos objectifs. Elle est là pour vous guider sur mesure.", disableBeacon: true, icon: <Bot size={24} className="text-indigo-600" /> },
+    { target: '.tour-ai-flash', placement: 'right', title: 'Analyses Flash', content: "Pas d'inspiration ? Cliquez sur l'un de ces boutons pour lancer une analyse financière complète en un clin d'œil.", disableBeacon: true, icon: <Zap size={24} className="text-amber-500" /> },
+    { target: '.tour-ai-upload', placement: 'top-start', title: 'Analyse de Documents', content: "La vraie magie est ici : envoyez un relevé bancaire, une fiche de paie ou un document SCPI (PDF/Image) pour que l'IA le décrypte pour vous !", disableBeacon: true, icon: <Cloud size={24} className="text-blue-500" /> },
+    { target: '.tour-ai-chat-input', placement: 'top', title: 'À vous de jouer !', content: "Posez votre première question. Par exemple : 'Comment investir 500€ ce mois-ci ?'. C'est à vous !", disableBeacon: true, icon: <MessageSquare size={24} className="text-indigo-600" /> }
   ],
   profile: [
-    { target: '.tour-profile-identity', placement: 'bottom', title: 'Votre Identité', content: "Vos informations de base pour une expérience plus personnalisée sur votre tableau de bord.", disableBeacon: true, icon: <User size={24} className="text-blue-600"/> },
-    { target: '.tour-profile-financial', placement: 'top', title: 'Données Financières', content: "Ces informations sont cruciales ! Elles permettent à l'IA de comprendre votre situation et d'adapter ses conseils (ex: tolérance au risque).", disableBeacon: true, icon: <Activity size={24} className="text-indigo-600"/> },
-    { target: '.tour-profile-security', placement: 'top', title: 'Sécurité & Sauvegarde', content: "Activez les rapports mensuels par email, ou exportez manuellement vos données pour créer une sauvegarde de sécurité.", disableBeacon: true, icon: <ShieldCheck size={24} className="text-green-600"/> }
+    { target: '.tour-profile-identity', placement: 'bottom', title: 'Votre Identité', content: "Vos informations de base pour une expérience plus personnalisée sur votre tableau de bord.", disableBeacon: true, icon: <User size={24} className="text-blue-600" /> },
+    { target: '.tour-profile-financial', placement: 'top', title: 'Données Financières', content: "Ces informations sont cruciales ! Elles permettent à l'IA de comprendre votre situation et d'adapter ses conseils (ex: tolérance au risque).", disableBeacon: true, icon: <Activity size={24} className="text-indigo-600" /> },
+    { target: '.tour-profile-security', placement: 'top', title: 'Sécurité & Sauvegarde', content: "Activez les rapports mensuels par email, ou exportez manuellement vos données pour créer une sauvegarde de sécurité.", disableBeacon: true, icon: <ShieldCheck size={24} className="text-green-600" /> }
   ]
 };
 
@@ -3813,7 +3822,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [toast, setToast] = useState(null);
-  
+
   // Remonte en haut de la page automatiquement à chaque changement d'onglet
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3837,9 +3846,9 @@ export default function App() {
 
   const startTour = useCallback((tourKey) => {
     if (!user || !userProfile) return;
-    
+
     const completedTours = userProfile.completedTours || [];
-    
+
     if (!completedTours.includes(tourKey)) {
       // --- FIX MATHÉMATIQUE JOYRIDE ---
       // Si on lance un tutoriel dans une modale fixée (comme le profil), 
@@ -3854,9 +3863,9 @@ export default function App() {
         const responsiveSteps = TOURS[tourKey].map(step => {
           let newTarget = step.target;
           if (newTarget.startsWith('.tour-tab-')) {
-             newTarget = `.tour-tab-${isMobile ? 'mobile' : 'desktop'}-${newTarget.replace('.tour-tab-', '')}`;
+            newTarget = `.tour-tab-${isMobile ? 'mobile' : 'desktop'}-${newTarget.replace('.tour-tab-', '')}`;
           } else if (newTarget === '.tour-profile') {
-             newTarget = `.tour-profile-${isMobile ? 'mobile' : 'desktop'}`;
+            newTarget = `.tour-profile-${isMobile ? 'mobile' : 'desktop'}`;
           }
 
           // Réduction chirurgicale de la cible sur mobile
@@ -3865,16 +3874,16 @@ export default function App() {
             if (newTarget === '.tour-asset-update') newTarget = '.tour-asset-update h3';
             if (newTarget === '.tour-asset-history') newTarget = '.tour-asset-history h3';
             if (newTarget === '.tour-asset-lines') newTarget = '.tour-asset-lines h3';
-            
+
             // Vues Modale Profil
             if (newTarget === '.tour-profile-identity') newTarget = '.tour-profile-identity label';
             if (newTarget === '.tour-profile-financial') newTarget = '.tour-profile-financial h4';
             if (newTarget === '.tour-profile-security') newTarget = '.tour-profile-security h4';
           }
-          
+
           return { ...step, target: newTarget };
         });
-        
+
         setTourState({ run: true, steps: responsiveSteps, stepIndex: 0, key: tourKey });
       }, 800);
     }
@@ -3901,7 +3910,7 @@ export default function App() {
     const handleDetailOpen = (e) => startTour(e.detail?.isComposite ? 'detail_composite' : 'detail');
     const handleFormOpen = () => startTour('assets_form');
     const handleAssetCreated = () => startTour('assets_eye');
-    
+
     // NOUVEAU : Récepteur pour forcer la fermeture d'un tutoriel validé par l'action
     const handleCloseTour = () => {
       setTourState(prev => {
@@ -3939,7 +3948,7 @@ export default function App() {
       const timer = setTimeout(() => {
         const currentStep = tourState.steps[tourState.stepIndex];
         const currentTarget = currentStep.target;
-        
+
         if (typeof currentTarget === 'string' && currentTarget !== 'body') {
           const el = document.querySelector(currentTarget);
           if (el) {
@@ -3954,7 +3963,7 @@ export default function App() {
             }, 50);
           }
         }
-      }, 150); 
+      }, 150);
       return () => clearTimeout(timer);
     }
   }, [tourState.run, tourState.stepIndex, tourState.steps]);
@@ -3962,21 +3971,21 @@ export default function App() {
   // Fonction asynchrone pour sauvegarder en base
   const handleJoyrideCallback = async (data) => {
     const { action, index, status, type } = data;
-    
+
     // Ajout de "action === 'close'" pour intercepter le clic sur la croix
     if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status) || type === 'target:notFound' || action === 'close') {
       setTourState(prev => ({ ...prev, run: false }));
-      
+
       if (user && userProfile && tourState.key) {
         const completedTours = userProfile.completedTours || [];
-        
+
         // Si ce tutoriel n'est pas encore marqué comme terminé
         if (!completedTours.includes(tourState.key)) {
           const newCompleted = [...completedTours, tourState.key];
-          
+
           // 1. Mise à jour immédiate de l'état local (pour éviter qu'il ne se relance à la seconde)
           setUserProfile(prev => ({ ...prev, completedTours: newCompleted }));
-          
+
           // 2. Sauvegarde silencieuse dans Firestore
           try {
             const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
@@ -3991,11 +4000,11 @@ export default function App() {
     }
   };
 
-// Message envoie auto mail
-const showToast = (msg) => setToast({ message: msg });
+  // Message envoie auto mail
+  const showToast = (msg) => setToast({ message: msg });
 
 
- // --- AUTO LOGOUT LOGIC (VERSION PERSISTANTE) ---
+  // --- AUTO LOGOUT LOGIC (VERSION PERSISTANTE) ---
   const [showAutoLogoutModal, setShowAutoLogoutModal] = useState(false);
   const logoutTimerRef = useRef(null);
   const warningTimerRef = useRef(null);
@@ -4074,7 +4083,7 @@ const showToast = (msg) => setToast({ message: msg });
     startTimers();
 
     events.forEach(event => window.addEventListener(event, handleUserActivity));
-    
+
     // Détection du retour sur l'onglet (crucial pour le verrouillage mobile)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -4083,7 +4092,7 @@ const showToast = (msg) => setToast({ message: msg });
       }
     };
     window.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       events.forEach(event => window.removeEventListener(event, handleUserActivity));
       window.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -4094,71 +4103,72 @@ const showToast = (msg) => setToast({ message: msg });
 
   // --- AUTH STATE & DATA FETCHING ---
 
-  useEffect(() => { 
-    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => { 
-      setUser(currentUser); 
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
       if (currentUser) {
-         // Load User Profile Data (Name/Surname)
-         try {
-         const profileDoc = await getDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'info'));
-         if (profileDoc.exists()) {
-             const data = profileDoc.data();
-             setUserProfile(data);
-         } else {
-                 // Try to init profile from Auth provider data (e.g. Google)
-                 if (currentUser.displayName) {
-                     const names = currentUser.displayName.split(' ');
-                     const newProfile = { 
-                         firstName: names[0], 
-                         lastName: names.length > 1 ? names.slice(1).join(' ') : '',
-                         email: currentUser.email 
-                     };
-                     await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'info'), newProfile);
-                     setUserProfile(newProfile);
-                 }
-             }
-         } catch(e) { 
-             console.error("Error fetching profile", e); 
-             // Silent fail for profile load, not critical
-         }
+        // Load User Profile Data (Name/Surname)
+        try {
+          const profileDoc = await getDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'info'));
+          if (profileDoc.exists()) {
+            const data = profileDoc.data();
+            setUserProfile(data);
+          } else {
+            // Try to init profile from Auth provider data (e.g. Google)
+            if (currentUser.displayName) {
+              const names = currentUser.displayName.split(' ');
+              const newProfile = {
+                firstName: names[0],
+                lastName: names.length > 1 ? names.slice(1).join(' ') : '',
+                email: currentUser.email
+              };
+              await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'info'), newProfile);
+              setUserProfile(newProfile);
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching profile", e);
+          // Silent fail for profile load, not critical
+        }
       } else {
-          setUserProfile(null);
+        setUserProfile(null);
       }
-      setLoading(false); 
-    }); 
-    return () => unsubAuth(); 
+      setLoading(false);
+    });
+    return () => unsubAuth();
   }, []);
 
   // --- DÉCLENCHEUR DE RAPPORT MENSUEL AUTOMATIQUE ---
-  const isProcessingReport = useRef(false); 
+  const isProcessingReport = useRef(false);
 
   useEffect(() => {
-      if (user && userProfile && assets !== null && transactions !== null && !isProcessingReport.current) {
-          const today = new Date();
-          const currentMonthKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
-          const lastReport = userProfile.lastMonthlyReportDate;
+    if (user && userProfile && assets !== null && transactions !== null && !isProcessingReport.current) {
+      const today = new Date();
+      const currentMonthKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
+      const lastReport = userProfile.lastMonthlyReportDate;
 
-          if (userProfile.emailReports && lastReport !== currentMonthKey) {
-              isProcessingReport.current = true; // On verrouille
-              triggerMonthlyProcess(user, userProfile, currentMonthKey, false)
-                  .finally(() => { isProcessingReport.current = false; });
-          }
+      if (userProfile.emailReports && lastReport !== currentMonthKey) {
+        isProcessingReport.current = true; // On verrouille
+        triggerMonthlyProcess(user, userProfile, currentMonthKey, false)
+          .finally(() => { isProcessingReport.current = false; });
       }
+    }
   }, [user, userProfile, assets, transactions]);
 
   useEffect(() => {
     if (!user) return;
-    
+
     // Ajout d'une gestion d'erreur robuste pour les listeners Firestore
     const unsubAssets = onSnapshot(
-      doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'assets'), 
-      (docSnapshot) => { 
-        if (docSnapshot.exists()) {setAssets(docSnapshot.data().items || []); 
-      }
-	  else {
-        setAssets([]); 
-      }
-    },
+      doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'assets'),
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          setAssets(docSnapshot.data().items || []);
+        }
+        else {
+          setAssets([]);
+        }
+      },
       (error) => {
         console.error("Erreur lecture Assets:", error);
         alert("Erreur de connexion aux données (Assets). Vérifiez vos droits d'accès.");
@@ -4166,10 +4176,10 @@ const showToast = (msg) => setToast({ message: msg });
     );
 
     const unsubTrans = onSnapshot(
-      doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'transactions'), 
-      (docSnapshot) => { 
-        if (docSnapshot.exists()) setTransactions(docSnapshot.data().items || []); 
-        else setTransactions([]); 
+      doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'transactions'),
+      (docSnapshot) => {
+        if (docSnapshot.exists()) setTransactions(docSnapshot.data().items || []);
+        else setTransactions([]);
       },
       (error) => {
         console.error("Erreur lecture Transactions:", error);
@@ -4179,24 +4189,24 @@ const showToast = (msg) => setToast({ message: msg });
     return () => { unsubAssets(); unsubTrans(); };
   }, [user]);
 
-  const saveAssets = async (newAssets) => { 
-    if (!user) return; 
-    try { 
-      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'assets'), { items: newAssets }); 
-    } catch (e) { 
+  const saveAssets = async (newAssets) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'assets'), { items: newAssets });
+    } catch (e) {
       console.error("Erreur sauvegarde Assets:", e);
       alert("Impossible d'enregistrer : " + e.message); // Feedback utilisateur
-    } 
+    }
   };
 
-  const saveTransactions = async (newTransactions) => { 
-    if (!user) return; 
-    try { 
-      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'transactions'), { items: newTransactions }); 
-    } catch (e) { 
-      console.error("Erreur sauvegarde Transactions:", e); 
+  const saveTransactions = async (newTransactions) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'transactions'), { items: newTransactions });
+    } catch (e) {
+      console.error("Erreur sauvegarde Transactions:", e);
       alert("Impossible d'enregistrer la transaction : " + e.message);
-    } 
+    }
   };
 
   const handleSetAssets = (newAssets) => { setAssets(newAssets); saveAssets(newAssets); };
@@ -4205,30 +4215,30 @@ const showToast = (msg) => setToast({ message: msg });
   // --- AUTH ACTIONS ---
 
   const handleLogin = async () => signInAnonymously(auth);
-  
+
   const handleEmailLogin = async (email, password) => {
-      await signInWithEmailAndPassword(auth, email, password);
+    await signInWithEmailAndPassword(auth, email, password);
   };
 
   const handleEmailRegister = async (email, password, profileData) => {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // Create user profile in Firestore immediately
-      await setDoc(doc(db, 'artifacts', appId, 'users', userCredential.user.uid, 'profile', 'info'), {
-          ...profileData,
-          email,
-          createdAt: new Date().toISOString()
-      });
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    // Create user profile in Firestore immediately
+    await setDoc(doc(db, 'artifacts', appId, 'users', userCredential.user.uid, 'profile', 'info'), {
+      ...profileData,
+      email,
+      createdAt: new Date().toISOString()
+    });
   };
 
   const handleGoogleLogin = async () => {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' }); 
-      auth.useDeviceLanguage(); 
-      await signInWithPopup(auth, provider);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    auth.useDeviceLanguage();
+    await signInWithPopup(auth, provider);
   };
 
   const handleForgotPassword = async (email) => {
-      await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(auth, email);
   };
 
   const handleLogout = () => signOut(auth);
@@ -4236,49 +4246,49 @@ const showToast = (msg) => setToast({ message: msg });
   const handleUpdateProfile = async (formData) => {
     if (!user) return;
     try {
-        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-        await setDoc(profileRef, formData, { merge: true });
-        setUserProfile(prev => ({ ...prev, ...formData }));
+      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
+      await setDoc(profileRef, formData, { merge: true });
+      setUserProfile(prev => ({ ...prev, ...formData }));
     } catch (e) {
-        console.error("Error updating profile:", e);
-        alert("Erreur lors de la mise à jour du profil.");
+      console.error("Error updating profile:", e);
+      alert("Erreur lors de la mise à jour du profil.");
     }
   };
 
 
   // --- TRANSACTION HELPERS (Keep existing logic) ---
-  
+
   const updateAssetHistoryWithDelta = (asset, date, delta) => {
     const prevHistory = asset.history || [];
-    let updatedHistory = prevHistory.map(h => { 
-      if (new Date(h.date) >= new Date(date)) { 
+    let updatedHistory = prevHistory.map(h => {
+      if (new Date(h.date) >= new Date(date)) {
         // Si c'est un investissement et que le delta est positif (virement entrant), 
         // on augmente aussi la valeur investie
         const isInvestedCompte = asset.type !== 'liquidite';
         const investedDelta = isInvestedCompte ? delta : 0;
-        return { 
-          ...h, 
+        return {
+          ...h,
           value: parseFloat((h.value + delta).toFixed(2)),
           investedValue: (h.investedValue || h.value) + investedDelta
-        }; 
-      } 
-      return h; 
+        };
+      }
+      return h;
     });
-    
+
     const exists = updatedHistory.some(h => h.date === date);
     if (!exists) {
-      const sorted = [...updatedHistory].sort((a,b) => new Date(a.date) - new Date(b.date));
+      const sorted = [...updatedHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
       const previousEntry = [...sorted].reverse().find(h => new Date(h.date) < new Date(date));
       // FIX : Si aucun point d'historique n'est trouvé avant la date, on utilise la valeur
       // actuelle de l'actif (asset.value) comme base au lieu de 0. Cela garantit que le Cash
       // s'accumule correctement même si l'historique est vide ou désynchronisé.
-      const baseValue = previousEntry ? previousEntry.value : (typeof asset.value === 'number' ? asset.value : 0); 
+      const baseValue = previousEntry ? previousEntry.value : (typeof asset.value === 'number' ? asset.value : 0);
       const baseInvested = previousEntry ? (previousEntry.investedValue || previousEntry.value) : (typeof asset.value === 'number' ? asset.value : 0);
       const isInvestedCompte = asset.type !== 'liquidite';
       const investedDelta = isInvestedCompte ? delta : 0;
-      
-      updatedHistory.push({ 
-        date: date, 
+
+      updatedHistory.push({
+        date: date,
         value: parseFloat((baseValue + delta).toFixed(2)),
         investedValue: baseInvested + investedDelta
       });
@@ -4300,25 +4310,25 @@ const showToast = (msg) => setToast({ message: msg });
 
       const asset = currentAssets[idx];
       const updatedHistory = updateAssetHistoryWithDelta(asset, date, delta);
-      
+
       // LOGIQUE : On cherche le point le plus récent qui n'est pas dans le futur
       const today = new Date().toISOString().split('T')[0];
       const sortedHistory = [...updatedHistory].sort((a, b) => a.date.localeCompare(b.date));
       const latestPastOrPresent = [...sortedHistory].reverse().find(h => h.date <= today);
-      
-      const currentRealValue = latestPastOrPresent 
-        ? latestPastOrPresent.value 
+
+      const currentRealValue = latestPastOrPresent
+        ? latestPastOrPresent.value
         : parseFloat((asset.value + (date <= today ? delta : 0)).toFixed(2));
 
       // Mise à jour de la poche Cash pour les comptes composites
       const isComposite = asset.type !== 'liquidite';
       let positions = asset.positions || [];
-      
+
       if (isComposite) {
         if (!positions.some(p => p.isCash)) {
           positions.push({ id: 'cash_pouch', name: '💰 Espèces', value: 0, isCash: true, history: [] });
         }
-        
+
         positions = positions.map(p => {
           if (p.isCash) {
             // FIX : Synchronisation de l'historique du Cash avec sa valeur actuelle.
@@ -4361,11 +4371,11 @@ const showToast = (msg) => setToast({ message: msg });
         });
       }
 
-      currentAssets[idx] = { 
-        ...asset, 
-        value: currentRealValue, 
-        positions: positions, 
-        history: updatedHistory 
+      currentAssets[idx] = {
+        ...asset,
+        value: currentRealValue,
+        positions: positions,
+        history: updatedHistory
       };
     };
 
@@ -4395,7 +4405,7 @@ const showToast = (msg) => setToast({ message: msg });
       const idx = currentAssets.findIndex(a => a.id.toString() === assetId.toString());
       if (idx === -1) return;
       const asset = currentAssets[idx];
-      
+
       const updatedHistory = updateAssetHistoryWithDelta(asset, date, delta);
       const sortedHistory = [...updatedHistory].sort((a, b) => a.date.localeCompare(b.date));
       const latestPastOrPresent = [...sortedHistory].reverse().find(h => h.date <= today);
@@ -4403,7 +4413,7 @@ const showToast = (msg) => setToast({ message: msg });
 
       const isComposite = asset.type !== 'liquidite';
       let positions = asset.positions || [];
-      
+
       if (isComposite) {
         if (!positions.some(p => p.isCash)) {
           positions.push({ id: 'cash_pouch', name: '💰 Espèces', value: 0, isCash: true, history: [] });
@@ -4468,7 +4478,7 @@ const showToast = (msg) => setToast({ message: msg });
   const handleDeleteTransaction = (transactionId) => {
     const transaction = transactions.find(t => t.id === transactionId);
     if (!transaction) return;
-    
+
     let currentAssets = [...assets];
     const today = new Date().toISOString().split('T')[0];
 
@@ -4476,7 +4486,7 @@ const showToast = (msg) => setToast({ message: msg });
       const idx = currentAssets.findIndex(a => a.id.toString() === assetId.toString());
       if (idx === -1) return;
       const asset = currentAssets[idx];
-      
+
       const updatedHistory = updateAssetHistoryWithDelta(asset, date, delta);
       const sortedHistory = [...updatedHistory].sort((a, b) => a.date.localeCompare(b.date));
       const latestPastOrPresent = [...sortedHistory].reverse().find(h => h.date <= today);
@@ -4484,7 +4494,7 @@ const showToast = (msg) => setToast({ message: msg });
 
       const isComposite = asset.type !== 'liquidite';
       let positions = asset.positions || [];
-      
+
       if (isComposite) {
         if (!positions.some(p => p.isCash)) {
           positions.push({ id: 'cash_pouch', name: '💰 Espèces', value: 0, isCash: true, history: [] });
@@ -4524,11 +4534,11 @@ const showToast = (msg) => setToast({ message: msg });
     };
 
     if (transaction.type === 'transfer') {
-        if (transaction.fromId) applyDeltaToAsset(transaction.fromId, transaction.date, transaction.amount);
-        if (transaction.toId) applyDeltaToAsset(transaction.toId, transaction.date, -transaction.amount);
+      if (transaction.fromId) applyDeltaToAsset(transaction.fromId, transaction.date, transaction.amount);
+      if (transaction.toId) applyDeltaToAsset(transaction.toId, transaction.date, -transaction.amount);
     } else if (transaction.linkedAssetId) {
-       let reverseDelta = transaction.type === 'expense' ? transaction.amount : -transaction.amount;
-       applyDeltaToAsset(transaction.linkedAssetId, transaction.date, reverseDelta);
+      let reverseDelta = transaction.type === 'expense' ? transaction.amount : -transaction.amount;
+      applyDeltaToAsset(transaction.linkedAssetId, transaction.date, reverseDelta);
     }
 
     const newTransactions = transactions.filter(t => t.id !== transactionId);
@@ -4540,19 +4550,19 @@ const showToast = (msg) => setToast({ message: msg });
 
   const handleDeleteAsset = (assetId) => {
     if (!user) return;
-    
+
     // 1. Supprimer l'actif
     const newAssets = assets.filter(a => a.id !== assetId);
     setAssets(newAssets);
     saveAssets(newAssets);
 
     // 2. Supprimer TOUTES les transactions liées en cascade
-    const newTransactions = transactions.filter(t => 
-      t.linkedAssetId !== assetId && 
-      t.fromId !== assetId && 
+    const newTransactions = transactions.filter(t =>
+      t.linkedAssetId !== assetId &&
+      t.fromId !== assetId &&
       t.toId !== assetId
     );
-    
+
     if (newTransactions.length !== transactions.length) {
       setTransactions(newTransactions);
       saveTransactions(newTransactions);
@@ -4835,7 +4845,7 @@ RÈGLES DE FORMAT :
         disableOverlayClose={true}
         disableScrolling={false}
         spotlightPadding={8}
-        floaterProps={{ 
+        floaterProps={{
           disableAnimation: true,
           preventOverflow: { boundariesElement: 'window' }
         }}
@@ -4918,6 +4928,7 @@ RÈGLES DE FORMAT :
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+        user={user}
         userProfile={userProfile}
         onUpdate={handleUpdateProfile}
         assets={assets}
@@ -4985,7 +4996,7 @@ RÈGLES DE FORMAT :
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-8">
         {activeTab === 'dashboard' && <DashboardView assets={assets} transactions={transactions} setActiveTab={setActiveTab} onDeleteTransaction={handleDeleteTransaction} userProfile={userProfile} />}
-        {activeTab === 'assets' && <AssetsView assets={assets} setAssets={handleSetAssets} transactions={transactions} onDeleteAsset={handleDeleteAsset} />}
+        {activeTab === 'assets' && <AssetsView assets={assets} setAssets={handleSetAssets} transactions={transactions} onDeleteAsset={handleDeleteAsset} userId={user?.uid} />}
         {activeTab === 'budget' && (
           <BudgetView
             transactions={transactions}
@@ -4996,12 +5007,12 @@ RÈGLES DE FORMAT :
           />
         )}
         {activeTab === 'advisor' && (
-          <AiAdvisorView 
-            assets={assets} 
-            transactions={transactions} 
-            userProfile={userProfile} 
-            messages={chatMessages} 
-            setMessages={setChatMessages} 
+          <AiAdvisorView
+            assets={assets}
+            transactions={transactions}
+            userProfile={userProfile}
+            messages={chatMessages}
+            setMessages={setChatMessages}
           />
         )}
       </main>
