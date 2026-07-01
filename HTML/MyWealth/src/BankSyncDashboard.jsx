@@ -8,12 +8,49 @@ export default function BankSyncDashboard({ userId }) {
   const [selectedBank, setSelectedBank] = useState('');
   const [isConfigured, setIsConfigured] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [status, setStatus] = useState(null);
 
   useEffect(() => {
     if (userId) {
       fetchInstitutions();
+      
+      // Check for Enable Banking callback
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code && !isSyncing) {
+        handleCallbackSync(code);
+      }
     }
   }, [userId]);
+
+  const handleCallbackSync = async (code) => {
+    setIsSyncing(true);
+    setStatus({ type: 'info', message: 'Finalisation de la connexion bancaire...' });
+    
+    // Nettoyer l'URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    try {
+      const res = await fetch('/api/sync-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: userId, code })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setStatus({ type: 'success', message: 'Comptes synchronisés avec succès !' });
+        // Optionnel : dispatcher un event pour rafraîchir la liste globale des assets
+        // window.dispatchEvent(new CustomEvent('bank-sync-complete', { detail: data.accounts }));
+      } else {
+        setStatus({ type: 'error', message: data.error || 'Erreur lors de la synchronisation.' });
+      }
+    } catch (err) {
+      setStatus({ type: 'error', message: 'Erreur réseau lors de la synchronisation.' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const fetchInstitutions = async () => {
     setLoading(true);
@@ -43,8 +80,8 @@ export default function BankSyncDashboard({ userId }) {
     setError(null);
 
     try {
-      // Revenir sur l'app MyWealth après validation
-      const redirectUrl = window.location.origin + '/?sync=success';
+      // Revenir sur l'app MyWealth après validation (Enable Banking ajoutera ?code=...)
+      const redirectUrl = window.location.origin + '/';
       
       const res = await fetch('/api/create-requisition', {
         method: 'POST',
@@ -71,7 +108,7 @@ export default function BankSyncDashboard({ userId }) {
   };
 
   if (!isConfigured) {
-    return null; // Si GoCardless n'est pas configuré dans le profil, on ne montre rien
+    return null; // Si Enable Banking n'est pas configuré dans le profil, on ne montre rien
   }
 
   return (
@@ -92,6 +129,17 @@ export default function BankSyncDashboard({ userId }) {
         <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 text-sm rounded-lg mb-4">
           <AlertTriangle size={16} />
           {error}
+        </div>
+      )}
+
+      {status && (
+        <div className={`flex items-center gap-2 p-3 text-sm rounded-lg mb-4 ${
+          status.type === 'success' ? 'bg-green-50 text-green-700' :
+          status.type === 'error' ? 'bg-red-50 text-red-700' :
+          'bg-blue-50 text-blue-700'
+        }`}>
+          {status.type === 'error' ? <AlertTriangle size={16} /> : <RefreshCw size={16} className={status.type === 'info' ? 'animate-spin' : ''} />}
+          {status.message}
         </div>
       )}
 

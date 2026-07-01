@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 if (!admin.apps.length) {
   try {
@@ -27,22 +28,20 @@ export function decryptKey(encryptedHex) {
   return decrypted;
 }
 
-export async function getGoCardlessToken(secretId, secretKey) {
-  const response = await fetch('https://bankaccountdata.gocardless.com/api/v2/token/new/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({
-      secret_id: secretId,
-      secret_key: secretKey
-    })
+// Génère un JWT pour l'API Enable Banking
+export function getEnableBankingToken(appId, privateKeyStr) {
+  // Le token est typiquement valide 1 heure
+  const payload = {
+    iss: 'enablebanking.com',
+    aud: 'api.enablebanking.com',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600
+  };
+
+  // Enable Banking requiert que le "kid" (key ID) soit l'App ID si aucune key string n'est fournie, 
+  // mais la spec de base utilise l'App ID pour l'authentification
+  return jwt.sign(payload, privateKeyStr, {
+    algorithm: 'RS256',
+    keyid: appId
   });
-  
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || data.summary || 'Failed to get GoCardless token');
-  }
-  return data.access;
 }

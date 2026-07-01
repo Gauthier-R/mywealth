@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { Settings, ShieldCheck, ExternalLink, KeyRound } from 'lucide-react';
-// Import your firebase auth or get the UID from your app's context
-// import { auth } from '../config/firebase'; 
+import { Settings, ShieldCheck, ExternalLink, KeyRound, FileText } from 'lucide-react';
 
-export default function GoCardlessSetup({ userId }) {
-  const [secretId, setSecretId] = useState('');
-  const [secretKey, setSecretKey] = useState('');
+export default function EnableBankingSetup({ userId }) {
+  const [appId, setAppId] = useState('');
+  const [privateKey, setPrivateKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
 
@@ -14,7 +12,6 @@ export default function GoCardlessSetup({ userId }) {
     setLoading(true);
     setStatus(null);
     
-    // Fallback if userId is not passed as prop
     const uid = userId || "USER_ID_PLACEHOLDER"; 
 
     try {
@@ -23,15 +20,15 @@ export default function GoCardlessSetup({ userId }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ uid, secretId, secretKey }),
+        body: JSON.stringify({ uid, appId, privateKey }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setStatus({ type: 'success', message: 'Clés sécurisées et enregistrées avec succès !' });
-        setSecretId('');
-        setSecretKey('');
+        setStatus({ type: 'success', message: 'Clés Enable Banking sécurisées et enregistrées avec succès !' });
+        setAppId('');
+        setPrivateKey('');
       } else {
         setStatus({ type: 'error', message: data.error || 'Erreur lors de la sauvegarde.' });
       }
@@ -51,7 +48,7 @@ export default function GoCardlessSetup({ userId }) {
         </div>
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Synchronisation Bancaire</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Liez vos comptes via GoCardless (Gratuit & Sécurisé)</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Liez vos comptes via Enable Banking (Gratuit & Sécurisé)</p>
         </div>
       </div>
 
@@ -62,20 +59,20 @@ export default function GoCardlessSetup({ userId }) {
         </h3>
         <ol className="list-decimal list-inside space-y-2 text-sm text-blue-800 dark:text-blue-200 ml-1">
           <li>
-            Créez un compte gratuit sur le portail développeur : 
-            <a href="https://bankaccountdata.gocardless.com/overview/" target="_blank" rel="noreferrer" className="inline-flex items-center ml-1 text-blue-600 hover:underline font-medium">
-              GoCardless <ExternalLink size={14} className="ml-1" />
+            Inscrivez-vous sur le portail développeur : 
+            <a href="https://enablebanking.com/" target="_blank" rel="noreferrer" className="inline-flex items-center ml-1 text-blue-600 hover:underline font-medium">
+              Enable Banking <ExternalLink size={14} className="ml-1" />
             </a>
           </li>
-          <li>Dans le menu à gauche, cliquez sur <strong>"User Secrets"</strong>.</li>
-          <li>Cliquez sur le bouton <strong>"+ Create new"</strong>.</li>
-          <li>Donnez-lui un nom (ex: "MyWealth App") et copiez les deux clés ci-dessous.</li>
+          <li>Dans le tableau de bord, créez une nouvelle application en choisissant l'environnement <strong>Restricted Production</strong> (gratuit).</li>
+          <li>Copiez l'<strong>Application ID</strong> et générez une <strong>Private Key</strong> (Clé privée, souvent un fichier .pem ou un long texte).</li>
+          <li>Collez-les ci-dessous. Elles seront chiffrées de bout-en-bout !</li>
         </ol>
       </div>
 
       <form onSubmit={handleSaveKeys} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Secret ID</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Application ID</label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
               <KeyRound size={16} />
@@ -83,27 +80,27 @@ export default function GoCardlessSetup({ userId }) {
             <input
               type="text"
               required
-              value={secretId}
-              onChange={(e) => setSecretId(e.target.value)}
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
               className="pl-10 w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-              placeholder="Ex: a1b2c3d4-..."
+              placeholder="Ex: c1d2e3f4-..."
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Secret Key</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Private Key (Contenu complet)</label>
           <div className="relative">
-             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-              <KeyRound size={16} />
+             <div className="absolute top-3 left-0 pl-3 flex items-start pointer-events-none text-gray-400">
+              <FileText size={16} />
             </div>
-            <input
-              type="password"
+            <textarea
               required
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-              className="pl-10 w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-              placeholder="Ex: 8f9g0h1i..."
+              rows={4}
+              value={privateKey}
+              onChange={(e) => setPrivateKey(e.target.value)}
+              className="pl-10 w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow font-mono text-xs"
+              placeholder="-----BEGIN PRIVATE KEY-----&#10;MIIEvAIBADANBgkqhkiG9w0BAQEFAASC...&#10;-----END PRIVATE KEY-----"
             />
           </div>
         </div>

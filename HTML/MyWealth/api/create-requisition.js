@@ -1,4 +1,4 @@
-import { db, decryptKey, getGoCardlessToken } from './_utils.js';
+import { db, decryptKey, getEnableBankingToken } from './_utils.js';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -13,65 +13,56 @@ export default async function handler(req, res) {
     if (!db) throw new Error('Database not initialized');
     
     const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists || !userDoc.data().gocardless_secret_id_encrypted) {
-      return res.status(400).json({ error: 'GoCardless keys not configured for this user' });
+    if (!userDoc.exists || !userDoc.data().enablebanking_app_id_encrypted) {
+      return res.status(400).json({ error: 'Enable Banking keys not configured for this user' });
     }
     
     const data = userDoc.data();
-    const secretId = decryptKey(data.gocardless_secret_id_encrypted);
-    const secretKey = decryptKey(data.gocardless_secret_key_encrypted);
-    const token = await getGoCardlessToken(secretId, secretKey);
+    const appId = decryptKey(data.enablebanking_app_id_encrypted);
+    const privateKey = decryptKey(data.enablebanking_private_key_encrypted);
+    const token = getEnableBankingToken(appId, privateKey);
     
-    // 1. Create an End User Agreement
-    const ref = crypto.randomUUID();
-    const agreementRes = await fetch('https://bankaccountdata.gocardless.com/api/v2/agreements/enduser/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        institution_id: institutionId,
-        max_historical_days: 180,
-        access_valid_for_days: 90,
-        access_scope: ["balances", "details", "transactions"]
-      })
-    });
+    // 1. Create the Auth session (equivalent to Requisition in GoCardless)
+    const stateId = crypto.randomUUID();
     
-    const agreement = await agreementRes.json();
-    if (!agreementRes.ok) throw new Error(agreement.detail || 'Failed to create agreement');
+    // Calculate a valid_until date (e.g. 90 days from now)
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + 89);
 
-    // 2. Create the Requisition
-    const reqRes = await fetch('https://bankaccountdata.gocardless.com/api/v2/requisitions/', {
+    const authRes = await fetch('https://api.enablebanking.com/auth', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        redirect: redirectUrl,
-        institution_id: institutionId,
-        reference: ref,
-        agreement: agreement.id,
-        user_language: "FR"
+        access: {
+          valid_until: validUntil.toISOString(),
+          balances: true,
+          transactions: true
+        },
+        aspsp: {
+          name: institutionId,
+          country: 'FR'
+        },
+        state: stateId,
+        redirect_url: redirectUrl
       })
     });
     
-    const requisition = await reqRes.json();
-    if (!reqRes.ok) throw new Error(requisition.detail || 'Failed to create requisition');
+    const authData = await authRes.json();
+    if (!authRes.ok) throw new Error(authData.error || 'Failed to create auth session');
     
-    // 3. Save requisition link in Firestore for this user
-    await db.collection('bank_accounts').doc(requisition.id).set({
+    // 2. Save auth state in Firestore to verify later and link to this user
+    await db.collection('bank_accounts').doc(stateId).set({
       uid: uid,
       institution_id: institutionId,
-      reference: ref,
-      status: requisition.status,
+      status: 'INITIATED',
       created_at: new Date().toISOString()
     });
     
-    return res.status(200).json({ link: requisition.link });
+    // L'API Enable Banking retourne l'URL de redirection dans authData.url
+    return res.status(200).json({ link: authData.url });
   } catch (err) {
     console.error('Create requisition error:', err);
     return res.status(500).json({ error: err.message });

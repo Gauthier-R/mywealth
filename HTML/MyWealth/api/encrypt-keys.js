@@ -20,10 +20,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Expecting the user's uid and the GoCardless keys
-  const { uid, secretId, secretKey } = req.body;
+  // Expecting the user's uid and the Enable Banking keys
+  const { uid, appId, privateKey } = req.body;
   
-  if (!uid || !secretId || !secretKey) {
+  if (!uid || !appId || !privateKey) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -33,20 +33,20 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Encrypt the GoCardless Secret ID and Secret Key
+    // Encrypt the Enable Banking App ID and Private Key
     const cipherId = crypto.createCipheriv('aes-256-cbc', Buffer.from(encryptionKey), Buffer.alloc(16, 0));
-    let encryptedId = cipherId.update(secretId, 'utf8', 'hex');
-    encryptedId += cipherId.final('hex');
+    let encryptedAppId = cipherId.update(appId, 'utf8', 'hex');
+    encryptedAppId += cipherId.final('hex');
 
     const cipherKey = crypto.createCipheriv('aes-256-cbc', Buffer.from(encryptionKey), Buffer.alloc(16, 0));
-    let encryptedKey = cipherKey.update(secretKey, 'utf8', 'hex');
-    encryptedKey += cipherKey.final('hex');
+    let encryptedPrivateKey = cipherKey.update(privateKey, 'utf8', 'hex');
+    encryptedPrivateKey += cipherKey.final('hex');
 
     // Save to Firestore
     await db.collection('users').doc(uid).set({
-      gocardless_secret_id_encrypted: encryptedId,
-      gocardless_secret_key_encrypted: encryptedKey,
-      gocardless_configured: true,
+      enablebanking_app_id_encrypted: encryptedAppId,
+      enablebanking_private_key_encrypted: encryptedPrivateKey,
+      enablebanking_configured: true,
       updated_at: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 

@@ -1,76 +1,77 @@
-import { db, decryptKey, getGoCardlessToken } from './_utils.js';
+import { db, decryptKey, getEnableBankingToken } from './_utils.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { uid, requisitionId } = req.body;
   
-  if (!uid || !requisitionId) {
-    return res.status(400).json({ error: 'Missing uid or requisitionId' });
+  // The frontend needs to pass the 'code' received from the callback redirect
+  const { uid, code } = req.body;
+  
+  if (!uid || !code) {
+    return res.status(400).json({ error: 'Missing uid or code' });
   }
 
   try {
     if (!db) throw new Error('Database not initialized');
 
     const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists || !userDoc.data().gocardless_secret_id_encrypted) {
-      return res.status(400).json({ error: 'GoCardless keys not configured for this user' });
+    if (!userDoc.exists || !userDoc.data().enablebanking_app_id_encrypted) {
+      return res.status(400).json({ error: 'Enable Banking keys not configured for this user' });
     }
     
     const data = userDoc.data();
-    const secretId = decryptKey(data.gocardless_secret_id_encrypted);
-    const secretKey = decryptKey(data.gocardless_secret_key_encrypted);
-    const token = await getGoCardlessToken(secretId, secretKey);
+    const appId = decryptKey(data.enablebanking_app_id_encrypted);
+    const privateKey = decryptKey(data.enablebanking_private_key_encrypted);
+    const token = getEnableBankingToken(appId, privateKey);
 
-    // 1. Get requisition details to see connected accounts
-    const reqRes = await fetch(`https://bankaccountdata.gocardless.com/api/v2/requisitions/${requisitionId}/`, {
+    // 1. Create a session by exchanging the auth code
+    const sessionRes = await fetch('https://api.enablebanking.com/sessions', {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ code })
     });
     
-    const requisition = await reqRes.json();
-    if (!reqRes.ok) throw new Error(requisition.detail || 'Failed to fetch requisition details');
+    const session = await sessionRes.json();
+    if (!sessionRes.ok) throw new Error(session.error || 'Failed to create session from code');
 
-    // Update status in Firestore
-    await db.collection('bank_accounts').doc(requisitionId).set({ status: requisition.status }, { merge: true });
-
-    if (requisition.status !== 'LN' && requisition.status !== 'EX') {
-      return res.status(400).json({ error: `Account is not linked yet (status: ${requisition.status})` });
-    }
-
-    const accounts = requisition.accounts || [];
+    const accounts = session.accounts || [];
     const syncedData = [];
 
-    // 2. For each account, fetch details, balances, and transactions
-    for (const accountId of accounts) {
-      // Get details (IBAN, owner name, currency)
-      const detailRes = await fetch(`https://bankaccountdata.gocardless.com/api/v2/accounts/${accountId}/details/`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
-      });
-      const detail = await detailRes.json();
-
+    // 2. For each account, fetch balances and transactions
+    for (const account of accounts) {
+      const accountUid = account.uid;
+      
       // Get balances
-      const balRes = await fetch(`https://bankaccountdata.gocardless.com/api/v2/accounts/${accountId}/balances/`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      const balRes = await fetch(`https://api.enablebanking.com/accounts/${accountUid}/balances`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      const balances = await balRes.json();
+      const balances = await balRes.ok ? await balRes.json() : {};
 
       // Get transactions
-      const txRes = await fetch(`https://bankaccountdata.gocardless.com/api/v2/accounts/${accountId}/transactions/`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      const txRes = await fetch(`https://api.enablebanking.com/accounts/${accountUid}/transactions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      const transactions = await txRes.json();
+      const transactions = await txRes.ok ? await txRes.json() : {};
 
       syncedData.push({
-        accountId,
-        details: detail.account || {},
+        accountId: accountUid,
+        details: account,
         balances: balances.balances || [],
-        transactions: transactions.transactions || { booked: [], pending: [] }
+        transactions: transactions.transactions || []
       });
     }
 
-    // Return the data back to the client so that the React app can format it and merge it into its state
+    // Save session reference in Firestore
+    await db.collection('bank_accounts').doc(session.session_id).set({
+      uid: uid,
+      session_id: session.session_id,
+      status: session.status,
+      created_at: new Date().toISOString()
+    });
+
+    // Return the data back to the client
     return res.status(200).json({ success: true, accounts: syncedData });
   } catch (err) {
     console.error('Sync accounts error:', err);

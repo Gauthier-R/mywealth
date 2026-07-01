@@ -1,4 +1,4 @@
-import { db, decryptKey, getGoCardlessToken } from './_utils.js';
+import { db, decryptKey, getEnableBankingToken } from './_utils.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -9,30 +9,37 @@ export default async function handler(req, res) {
     if (!db) throw new Error('Database not initialized');
     
     const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists || !userDoc.data().gocardless_secret_id_encrypted) {
-      return res.status(400).json({ error: 'GoCardless keys not configured for this user' });
+    if (!userDoc.exists || !userDoc.data().enablebanking_app_id_encrypted) {
+      return res.status(400).json({ error: 'Enable Banking keys not configured for this user' });
     }
     
     const data = userDoc.data();
-    const secretId = decryptKey(data.gocardless_secret_id_encrypted);
-    const secretKey = decryptKey(data.gocardless_secret_key_encrypted);
+    const appId = decryptKey(data.enablebanking_app_id_encrypted);
+    const privateKey = decryptKey(data.enablebanking_private_key_encrypted);
     
-    const token = await getGoCardlessToken(secretId, secretKey);
+    const token = getEnableBankingToken(appId, privateKey);
     
-    // Fetch institutions (FR by default, can be dynamic later)
-    const response = await fetch('https://bankaccountdata.gocardless.com/api/v2/institutions/?country=FR', {
+    // Fetch ASPSPs (Institutions) - Filtrer pour la France par exemple ou retourner tout
+    const response = await fetch('https://api.enablebanking.com/aspsps?country=FR', {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
+        'Authorization': `Bearer ${token}`
       }
     });
     
-    const instData = await response.json();
+    const aspsps = await response.json();
     if (!response.ok) {
-      throw new Error(instData.detail || 'Failed to fetch institutions');
+      throw new Error(aspsps.error || 'Failed to fetch institutions');
     }
     
-    return res.status(200).json(instData);
+    // Enable Banking retourne un objet avec aspsps: [...]
+    // On mappe pour correspondre au format attendu par notre frontend (id, name)
+    const formattedInstitutions = (aspsps.aspsps || []).map(bank => ({
+      id: bank.name, // Enable Banking utilise souvent le nom comme identifiant ou un objet complet, ici on garde le nom pour l'auth
+      name: bank.title || bank.name,
+      logo: bank.logo
+    }));
+
+    return res.status(200).json(formattedInstitutions);
   } catch (err) {
     console.error('Error in institutions:', err);
     return res.status(500).json({ error: err.message });
