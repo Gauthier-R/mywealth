@@ -1,19 +1,6 @@
-import * as admin from 'firebase-admin';
+import { db } from './_utils.js';
+import { FieldValue } from 'firebase-admin/firestore';
 import crypto from 'crypto';
-
-// Initialize Firebase Admin (requires FIREBASE_SERVICE_ACCOUNT_KEY env var in Vercel)
-if (!admin.apps.length) {
-  try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-  } catch (error) {
-    console.error('Firebase admin initialization error', error);
-  }
-}
-
-const db = admin.apps.length ? admin.firestore() : null;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -32,6 +19,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server misconfiguration: ENCRYPTION_SECRET must be 32 characters long' });
   }
 
+  if (!db) {
+    return res.status(500).json({ error: 'Database not initialized (missing Firebase config)' });
+  }
+
   try {
     // Encrypt the Enable Banking App ID and Private Key
     const cipherId = crypto.createCipheriv('aes-256-cbc', Buffer.from(encryptionKey), Buffer.alloc(16, 0));
@@ -47,7 +38,7 @@ export default async function handler(req, res) {
       enablebanking_app_id_encrypted: encryptedAppId,
       enablebanking_private_key_encrypted: encryptedPrivateKey,
       enablebanking_configured: true,
-      updated_at: admin.firestore.FieldValue.serverTimestamp()
+      updated_at: FieldValue.serverTimestamp()
     }, { merge: true });
 
     return res.status(200).json({ success: true, message: 'Keys encrypted and saved successfully.' });
