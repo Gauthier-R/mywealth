@@ -15,7 +15,7 @@ import {
   Globe, PiggyBank, Wand2, Calculator, Info, AlertTriangle, Clock,
   Utensils, Home, Car, Gamepad2, Heart, ShoppingBag, Zap, Briefcase,
   CheckCircle, LogIn, UserPlus, KeyRound, Target, Scale, Menu,
-  BarChart2, LineChart as LineChartIcon, CalendarDays, ChevronRight
+  BarChart2, LineChart as LineChartIcon, CalendarDays, ChevronRight, RefreshCw
 } from 'lucide-react';
 
 import emailjs from '@emailjs/browser';
@@ -1846,6 +1846,11 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
                         <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2"><Info size={20} /> Mode Synchronisé</h3>
                         <p className="text-sm text-indigo-800 leading-relaxed">L'historique est calculé automatiquement en additionnant l'historique de chaque ligne.</p>
                       </Card>
+                    ) : asset.isAutoSynced ? (
+                      <Card className="h-fit bg-blue-50 border-blue-100">
+                        <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2"><RefreshCw size={20} /> Compte Synchronisé</h3>
+                        <p className="text-sm text-blue-800 leading-relaxed">Ce compte est mis à jour automatiquement depuis votre banque. La gestion manuelle du solde est désactivée.</p>
+                      </Card>
                     ) : (
                       <Card className="h-fit border-blue-200 bg-blue-50">
                         <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2"><Edit size={20} /> Mettre à jour</h3>
@@ -1855,7 +1860,7 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
                         </form>
                       </Card>
                     )}
-                    {!isComposite && (
+                    {!isComposite && !asset.isAutoSynced && (
                       <Card className="h-fit bg-slate-50/50 border-slate-200">
                         <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><History size={20} /> Point passé</h3>
                         <form onSubmit={handleAddAssetHistory} className="space-y-4">
@@ -2795,7 +2800,7 @@ const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDelete
     setAssets(newAssets.map(a => a.id === updatedAsset.id ? updatedAsset : a));
     setSelectedAsset(updatedAsset);
   };
-  const handleBankSyncComplete = (syncedAccounts) => {
+  const handleBankSyncComplete = (syncedAccounts, sessionInfo = {}) => {
     const currentAssets = assets || [];
     const updatedAssets = [...currentAssets];
     const currentTx = transactions || [];
@@ -2826,14 +2831,18 @@ const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDelete
       
       const currency = acc.details?.currency || 'EUR';
       const name = acc.details?.name || acc.details?.product || 'Compte Bancaire';
+      const institution = acc.details?.bank_name || 'Banque';
 
       const newAsset = {
         id: assetId,
+        accountUid: acc.accountId,
         name: name + (currency !== 'EUR' ? ` (${currency})` : ''),
-        institution: 'Banque Synchronisée',
+        institution: institution,
         type: 'liquidite',
         value: value,
         isAutoSynced: true,
+        sessionId: sessionInfo.session_id || null,
+        validUntil: sessionInfo.valid_until || null,
         history: [{ date: new Date().toISOString().split('T')[0], value }]
       };
 
@@ -2910,7 +2919,30 @@ const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDelete
                   </div>
                 )}
               </div>
-              <p className="text-sm text-slate-500 truncate">{asset.institution}</p>
+              <p className="text-sm text-slate-500 truncate flex items-center gap-1">
+                {asset.institution}
+                {asset.isAutoSynced && (() => {
+                  const isExpired = asset.validUntil && new Date(asset.validUntil) < new Date();
+                  if (isExpired) {
+                    return (
+                      <AlertTriangle 
+                        size={14} 
+                        className="text-red-500 cursor-pointer ml-1" 
+                        title="Synchronisation expirée (90 jours). Cliquez pour reconnecter." 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          setToast({ type: 'warning', message: 'Veuillez reconnecter votre banque via le panneau ci-dessus pour renouveler l\\'accès 90 jours.' });
+                        }}
+                      />
+                    );
+                  }
+                  if (isBackgroundSyncing) {
+                    return <RefreshCw size={12} className="text-blue-500 animate-spin ml-1" title="Synchronisation en arrière-plan..." />;
+                  }
+                  return <RefreshCw size={12} className="text-blue-500 ml-1" title="Synchronisé avec la banque" />;
+                })()}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4 flex-shrink-0"><span className="font-bold text-slate-700">{formatCurrency(asset.value)}</span>
@@ -3926,6 +3958,104 @@ export default function App() {
       localStorage.setItem(`myWealth_chat_${user.uid}`, JSON.stringify(chatMessages));
     }
   }, [chatMessages, user]);
+
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+
+  // Background Sync Effect
+  useEffect(() => {
+    if (!user || loading || !assets || assets.length === 0) return;
+
+    const eligibleAssets = assets.filter(a => a.isAutoSynced && a.accountUid && (!a.validUntil || new Date(a.validUntil) > new Date()));
+    
+    if (eligibleAssets.length > 0) {
+      const doSync = async () => {
+        setIsBackgroundSyncing(true);
+        try {
+          const accountUids = [...new Set(eligibleAssets.map(a => a.accountUid))];
+          const res = await fetch('/api/background-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: user.uid, accountUids })
+          });
+          
+          if (!res.ok) throw new Error('Background sync API error');
+          const data = await res.json();
+          
+          if (data.success && data.accounts) {
+             let newAssets = [...assets];
+             let newTx = [...(transactions || [])];
+             let hasChanges = false;
+             
+             data.accounts.forEach(syncedAcc => {
+                if (syncedAcc.error) {
+                   if (syncedAcc.expired) {
+                      const idx = newAssets.findIndex(a => a.accountUid === syncedAcc.accountId);
+                      if (idx >= 0) {
+                        newAssets[idx] = { ...newAssets[idx], validUntil: new Date(Date.now() - 86400000).toISOString() };
+                        hasChanges = true;
+                      }
+                   }
+                   return;
+                }
+                
+                const idx = newAssets.findIndex(a => a.accountUid === syncedAcc.accountId);
+                if (idx >= 0) {
+                   const assetId = newAssets[idx].id;
+                   const val = parseFloat(syncedAcc.balances[0]?.balance_amount?.amount) || 0;
+                   if (newAssets[idx].value !== val) {
+                      const today = new Date().toISOString().split('T')[0];
+                      let history = [...(newAssets[idx].history || [])];
+                      const histIdx = history.findIndex(h => h.date === today);
+                      if (histIdx >= 0) history[histIdx].value = val;
+                      else history.push({ date: today, value: val });
+                      
+                      newAssets[idx] = { ...newAssets[idx], value: val, history };
+                      hasChanges = true;
+                   }
+                   
+                   syncedAcc.transactions.forEach(tx => {
+                     const txId = `eb_${tx.transaction_id || Math.random()}`;
+                     if (!newTx.some(t => t.id === txId)) {
+                       const amountStr = tx.transaction_amount?.amount || '0';
+                       const amount = parseFloat(amountStr);
+                       const date = tx.booking_date || new Date().toISOString().split('T')[0];
+                       const desc = tx.remittance_information_unstructured || tx.remittance_information_structured || 'Opération synchronisée';
+                       newTx.push({
+                         id: txId,
+                         date: date,
+                         amount: Math.abs(amount),
+                         type: amount >= 0 ? 'income' : 'expense',
+                         category: 'Général',
+                         description: desc,
+                         assetId: assetId,
+                         isAutoSynced: true
+                       });
+                       hasChanges = true;
+                     }
+                   });
+                }
+             });
+             
+             if (hasChanges) {
+                setAssets(newAssets);
+                setTransactions(newTx);
+             }
+          }
+        } catch (err) {
+          console.error("Erreur de background sync:", err);
+        } finally {
+          setIsBackgroundSyncing(false);
+        }
+      };
+
+      const shouldSyncRef = localStorage.getItem(`myWealth_lastSync_${user.uid}`);
+      const now = Date.now();
+      if (!shouldSyncRef || now - parseInt(shouldSyncRef) > 1000 * 60 * 15) {
+         localStorage.setItem(`myWealth_lastSync_${user.uid}`, now.toString());
+         doSync();
+      }
+    }
+  }, [user, assets, transactions, loading]);
 
   // --- LOGIQUE ONBOARDING CONTEXTUEL (BASE DE DONNÉES) ---
   const [tourState, setTourState] = useState({ run: false, steps: [], stepIndex: 0, key: '' });

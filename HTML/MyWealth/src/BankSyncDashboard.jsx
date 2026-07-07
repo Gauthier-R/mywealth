@@ -10,6 +10,7 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
   const [isSyncing, setIsSyncing] = useState(false);
   const [status, setStatus] = useState(null);
   const [fetchedAccounts, setFetchedAccounts] = useState(null);
+  const [sessionInfo, setSessionInfo] = useState(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
 
   // Helper function to get a stable ID from Enable Banking account
@@ -83,6 +84,7 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
         
         const newAccounts = data.accounts || [];
         setFetchedAccounts(newAccounts);
+        setSessionInfo({ session_id: data.session_id, valid_until: data.valid_until });
       } else {
         setStatus({ type: 'error', message: data.error || 'Erreur lors de la synchronisation.' });
       }
@@ -256,12 +258,23 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
             })}
           </div>
           
-          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end gap-3">
+            <button
+              onClick={() => {
+                setFetchedAccounts(null);
+                setStatus(null);
+                // Nettoyer l'URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }}
+              className="px-6 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium rounded-lg transition-colors"
+            >
+              Annuler
+            </button>
             <button
               onClick={() => {
                 if (onSyncComplete) {
                   const accountsToImport = fetchedAccounts.filter(acc => selectedAccountIds.includes(acc.accountId));
-                  onSyncComplete(accountsToImport);
+                  onSyncComplete(accountsToImport, sessionInfo);
                   setFetchedAccounts(null); // hide list
                   setStatus({ type: 'success', message: `${accountsToImport.length} compte(s) importé(s) avec succès !` });
                   // Nettoyer l'URL

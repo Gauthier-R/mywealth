@@ -73,7 +73,12 @@ export default async function handler(req, res) {
     });
 
     // Return the data back to the client
-    return res.status(200).json({ success: true, accounts: syncedData });
+    return res.status(200).json({ 
+      success: true, 
+      session_id: sessionIdToSave,
+      valid_until: session.valid_until || null,
+      accounts: syncedData 
+    });
   } catch (err) {
     console.error('Sync accounts error:', err);
     return res.status(500).json({ error: err.message });
