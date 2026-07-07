@@ -491,7 +491,7 @@ const ProfileModal = ({ isOpen, onClose, user, userProfile, onUpdate, assets, tr
           </div>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); onUpdate(formData); handleClose(); }} className="space-y-5">
+        <div className="space-y-5">
           {/* IDENTITÉ */}
           <div className="tour-profile-identity grid grid-cols-2 gap-4">
             <div>
@@ -587,9 +587,9 @@ const ProfileModal = ({ isOpen, onClose, user, userProfile, onUpdate, assets, tr
 
           <div className="flex gap-3 justify-end mt-4 border-t border-slate-100 pt-4">
             <Button variant="secondary" onClick={handleClose} type="button">Annuler</Button>
-            <Button type="submit" disabled={loading}>Enregistrer</Button>
+            <Button onClick={() => { onUpdate(formData); handleClose(); }} disabled={loading}>Enregistrer</Button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
