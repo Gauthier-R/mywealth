@@ -2795,11 +2795,47 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) 
     setAssets(newAssets.map(a => a.id === updatedAsset.id ? updatedAsset : a));
     setSelectedAsset(updatedAsset);
   };
+  const handleBankSyncComplete = (syncedAccounts) => {
+    const newAssets = syncedAccounts.map(acc => {
+      let value = 0;
+      if (acc.balances && acc.balances.length > 0) {
+        value = parseFloat(acc.balances[0].balance_amount.amount) || 0;
+      }
+      
+      const currency = acc.details?.currency || 'EUR';
+      const name = acc.details?.name || acc.details?.product || 'Compte Bancaire';
+
+      return {
+        id: `enablebanking_${acc.accountId}`,
+        name: name + (currency !== 'EUR' ? ` (${currency})` : ''),
+        institution: 'Banque Synchronisée',
+        type: 'liquidite', // default to liquidite for imported accounts
+        value: value,
+        isAutoSynced: true,
+        history: [{ date: new Date().toISOString().split('T')[0], value }]
+      };
+    });
+
+    setAssets(prev => {
+      const current = prev || [];
+      const updated = [...current];
+      newAssets.forEach(newAcc => {
+        const idx = updated.findIndex(a => a.id === newAcc.id);
+        if (idx >= 0) {
+          updated[idx] = newAcc;
+        } else {
+          updated.push(newAcc);
+        }
+      });
+      return updated;
+    });
+  };
+
   const groupedAssets = useMemo(() => { const groups = {}; assets.forEach(asset => { if (!groups[asset.type]) groups[asset.type] = []; groups[asset.type].push(asset); }); return groups; }, [assets]);
 
   return (
     <div className="space-y-6 animate-in slide-in-from-right duration-300 text-slate-900 pb-24 md:pb-8">
-      {userId && <BankSyncDashboard userId={userId} />}
+      {userId && <BankSyncDashboard userId={userId} onSyncComplete={handleBankSyncComplete} />}
       <ConfirmationModal isOpen={!!assetToDelete} onClose={() => setAssetToDelete(null)} onConfirm={() => { handleDelete(assetToDelete); setAssetToDelete(null); }} message="Supprimer ce compte ?" />
       {selectedAsset && (<AssetDetailOverlay key={selectedAsset.id} asset={selectedAsset} onClose={() => setSelectedAsset(null)} onUpdate={handleUpdateAsset} transactions={transactions} />)}
       {(!assets || assets.length === 0) ? (<EmptyState title="Aucun actif" description="Ajoutez votre premier compte." actionLabel="Ajouter" onAction={() => { setIsFormOpen(true); window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); }} icon={Wallet} actionClassName={!isFormOpen ? "tour-add-asset" : ""} />) : (<div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Mes Actifs</h2><Button onClick={() => { setIsFormOpen(!isFormOpen); if (!isFormOpen) { window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); } }} variant={isFormOpen ? "secondary" : "primary"} className={`${!isFormOpen ? 'tour-add-asset' : ''} transition-all duration-300 min-w-[120px]`}>{isFormOpen ? <><X size={20} /> Annuler</> : <><PlusCircle size={20} /> Ajouter</>}</Button></div>)}

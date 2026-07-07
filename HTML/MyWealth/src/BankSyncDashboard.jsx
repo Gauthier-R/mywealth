@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Link as LinkIcon, RefreshCw, PlusCircle, AlertTriangle, ExternalLink } from 'lucide-react';
 
-export default function BankSyncDashboard({ userId }) {
+export default function BankSyncDashboard({ userId, onSyncComplete }) {
   const [institutions, setInstitutions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -40,8 +40,9 @@ export default function BankSyncDashboard({ userId }) {
       
       if (res.ok && data.success) {
         setStatus({ type: 'success', message: 'Comptes synchronisés avec succès !' });
-        // Optionnel : dispatcher un event pour rafraîchir la liste globale des assets
-        // window.dispatchEvent(new CustomEvent('bank-sync-complete', { detail: data.accounts }));
+        if (onSyncComplete) {
+          onSyncComplete(data.accounts);
+        }
       } else {
         setStatus({ type: 'error', message: data.error || 'Erreur lors de la synchronisation.' });
       }
