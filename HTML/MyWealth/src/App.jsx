@@ -3881,7 +3881,13 @@ const TOURS = {
 export default function App() {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('code') || params.get('tab') === 'assets') return 'assets';
+    }
+    return 'dashboard';
+  });
   const [assets, setAssets] = useState(null);
   const [transactions, setTransactions] = useState(null);
   const [loading, setLoading] = useState(true);

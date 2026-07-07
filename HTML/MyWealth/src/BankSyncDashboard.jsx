@@ -12,6 +12,16 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
   const [fetchedAccounts, setFetchedAccounts] = useState(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
 
+  // Utiliser un effet pour que la présélection tienne compte de existingAssets même si ça charge en retard
+  useEffect(() => {
+    if (fetchedAccounts && existingAssets) {
+      const preselected = fetchedAccounts
+        .filter(acc => !existingAssets.some(asset => asset.id === `enablebanking_${acc.accountId}`))
+        .map(acc => acc.accountId);
+      setSelectedAccountIds(preselected);
+    }
+  }, [fetchedAccounts, existingAssets]);
+
   useEffect(() => {
     if (userId) {
       fetchInstitutions();
@@ -45,12 +55,6 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
         
         const newAccounts = data.accounts || [];
         setFetchedAccounts(newAccounts);
-        
-        // Présélectionner les comptes qui ne sont pas déjà dans existingAssets
-        const preselected = newAccounts
-          .filter(acc => !existingAssets.some(asset => asset.id === `enablebanking_${acc.accountId}`))
-          .map(acc => acc.accountId);
-        setSelectedAccountIds(preselected);
       } else {
         setStatus({ type: 'error', message: data.error || 'Erreur lors de la synchronisation.' });
       }
