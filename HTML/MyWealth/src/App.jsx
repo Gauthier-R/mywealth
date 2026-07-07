@@ -2816,19 +2816,17 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) 
       };
     });
 
-    setAssets(prev => {
-      const current = prev || [];
-      const updated = [...current];
-      newAssets.forEach(newAcc => {
-        const idx = updated.findIndex(a => a.id === newAcc.id);
-        if (idx >= 0) {
-          updated[idx] = newAcc;
-        } else {
-          updated.push(newAcc);
-        }
-      });
-      return updated;
+    const current = assets || [];
+    const updated = [...current];
+    newAssets.forEach(newAcc => {
+      const idx = updated.findIndex(a => a.id === newAcc.id);
+      if (idx >= 0) {
+        updated[idx] = newAcc;
+      } else {
+        updated.push(newAcc);
+      }
     });
+    setAssets(updated);
   };
 
   const groupedAssets = useMemo(() => { const groups = {}; assets.forEach(asset => { if (!groups[asset.type]) groups[asset.type] = []; groups[asset.type].push(asset); }); return groups; }, [assets]);
