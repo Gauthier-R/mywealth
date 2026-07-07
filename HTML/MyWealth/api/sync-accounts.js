@@ -64,10 +64,11 @@ export default async function handler(req, res) {
     }
 
     // Save session reference in Firestore
-    await db.collection('bank_accounts').doc(session.session_id).set({
+    const sessionIdToSave = session.session_id || `session_${Date.now()}`;
+    await db.collection('bank_accounts').doc(sessionIdToSave).set({
       uid: uid,
-      session_id: session.session_id,
-      status: session.status,
+      session_id: sessionIdToSave,
+      status: session.status || 'ACTIVE',
       created_at: new Date().toISOString()
     });
 
