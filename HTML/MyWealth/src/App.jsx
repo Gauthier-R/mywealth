@@ -2707,7 +2707,7 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
 
 // ... AssetsView, BudgetView, AiAdvisorView remain largely the same, skipped for brevity but would be here ...
 
-const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) => {
+const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDeleteAsset, userId }) => {
   // Ajoutez ceci au tout début :
   if (assets === null) {
     return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -2796,7 +2796,14 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) 
     setSelectedAsset(updatedAsset);
   };
   const handleBankSyncComplete = (syncedAccounts) => {
-    const newAssets = syncedAccounts.map(acc => {
+    const currentAssets = assets || [];
+    const updatedAssets = [...currentAssets];
+    const currentTx = transactions || [];
+    const updatedTx = [...currentTx];
+
+    syncedAccounts.forEach(acc => {
+      const assetId = `enablebanking_${acc.accountId}`;
+      
       let value = 0;
       if (acc.balances && acc.balances.length > 0) {
         value = parseFloat(acc.balances[0].balance_amount.amount) || 0;
@@ -2805,8 +2812,8 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) 
       const currency = acc.details?.currency || 'EUR';
       const name = acc.details?.name || acc.details?.product || 'Compte Bancaire';
 
-      return {
-        id: `enablebanking_${acc.accountId}`,
+      const newAsset = {
+        id: assetId,
         name: name + (currency !== 'EUR' ? ` (${currency})` : ''),
         institution: 'Banque Synchronisée',
         type: 'liquidite',
@@ -2814,26 +2821,50 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) 
         isAutoSynced: true,
         history: [{ date: new Date().toISOString().split('T')[0], value }]
       };
-    });
 
-    const current = assets || [];
-    const updated = [...current];
-    newAssets.forEach(newAcc => {
-      const idx = updated.findIndex(a => a.id === newAcc.id);
-      if (idx >= 0) {
-        updated[idx] = newAcc;
+      const assetIdx = updatedAssets.findIndex(a => a.id === assetId);
+      if (assetIdx >= 0) {
+        newAsset.history = updatedAssets[assetIdx].history || newAsset.history;
+        updatedAssets[assetIdx] = newAsset;
       } else {
-        updated.push(newAcc);
+        updatedAssets.push(newAsset);
+      }
+
+      if (acc.transactions && acc.transactions.length > 0 && setTransactions) {
+        acc.transactions.forEach(tx => {
+          const txId = `eb_${tx.transaction_id || Math.random()}`;
+          if (!updatedTx.some(t => t.id === txId)) {
+            const amountStr = tx.transaction_amount?.amount || '0';
+            const amount = parseFloat(amountStr);
+            const date = tx.booking_date || new Date().toISOString().split('T')[0];
+            const desc = tx.remittance_information_unstructured || tx.remittance_information_structured || 'Opération synchronisée';
+            
+            updatedTx.push({
+              id: txId,
+              date: date,
+              amount: Math.abs(amount),
+              type: amount >= 0 ? 'income' : 'expense',
+              category: 'Général',
+              description: desc,
+              assetId: assetId,
+              isAutoSynced: true
+            });
+          }
+        });
       }
     });
-    setAssets(updated);
+
+    setAssets(updatedAssets);
+    if (setTransactions) {
+      setTransactions(updatedTx);
+    }
   };
 
   const groupedAssets = useMemo(() => { const groups = {}; assets.forEach(asset => { if (!groups[asset.type]) groups[asset.type] = []; groups[asset.type].push(asset); }); return groups; }, [assets]);
 
   return (
     <div className="space-y-6 animate-in slide-in-from-right duration-300 text-slate-900 pb-24 md:pb-8">
-      {userId && <BankSyncDashboard userId={userId} onSyncComplete={handleBankSyncComplete} />}
+      {userId && <BankSyncDashboard userId={userId} onSyncComplete={handleBankSyncComplete} existingAssets={assets || []} />}
       <ConfirmationModal isOpen={!!assetToDelete} onClose={() => setAssetToDelete(null)} onConfirm={() => { handleDelete(assetToDelete); setAssetToDelete(null); }} message="Supprimer ce compte ?" />
       {selectedAsset && (<AssetDetailOverlay key={selectedAsset.id} asset={selectedAsset} onClose={() => setSelectedAsset(null)} onUpdate={handleUpdateAsset} transactions={transactions} />)}
       {(!assets || assets.length === 0) ? (<EmptyState title="Aucun actif" description="Ajoutez votre premier compte." actionLabel="Ajouter" onAction={() => { setIsFormOpen(true); window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); }} icon={Wallet} actionClassName={!isFormOpen ? "tour-add-asset" : ""} />) : (<div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">Mes Actifs</h2><Button onClick={() => { setIsFormOpen(!isFormOpen); if (!isFormOpen) { window.dispatchEvent(new Event('close-tour')); setTimeout(() => window.dispatchEvent(new Event('tour-asset-form-open')), 500); } }} variant={isFormOpen ? "secondary" : "primary"} className={`${!isFormOpen ? 'tour-add-asset' : ''} transition-all duration-300 min-w-[120px]`}>{isFormOpen ? <><X size={20} /> Annuler</> : <><PlusCircle size={20} /> Ajouter</>}</Button></div>)}
@@ -5030,7 +5061,7 @@ RÈGLES DE FORMAT :
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-8">
         {activeTab === 'dashboard' && <DashboardView assets={assets} transactions={transactions} setActiveTab={setActiveTab} onDeleteTransaction={handleDeleteTransaction} userProfile={userProfile} />}
-        {activeTab === 'assets' && <AssetsView assets={assets} setAssets={handleSetAssets} transactions={transactions} onDeleteAsset={handleDeleteAsset} userId={user?.uid} />}
+        {activeTab === 'assets' && <AssetsView assets={assets} setAssets={handleSetAssets} transactions={transactions} setTransactions={handleSetTransactions} onDeleteAsset={handleDeleteAsset} userId={user?.uid} />}
         {activeTab === 'budget' && (
           <BudgetView
             transactions={transactions}
