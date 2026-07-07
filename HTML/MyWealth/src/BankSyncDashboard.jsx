@@ -12,11 +12,39 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
   const [fetchedAccounts, setFetchedAccounts] = useState(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
 
+  // Helper function to get a stable ID from Enable Banking account
+  const getStableAccountId = (acc) => {
+    const accIdObj = acc.details?.account_id || {};
+    if (accIdObj.iban) return `eb_iban_${accIdObj.iban}`;
+    if (accIdObj.bban) return `eb_bban_${accIdObj.bban}`;
+    if (accIdObj.other?.identification) return `eb_other_${accIdObj.other.identification}`;
+    
+    // Fallback if no IBAN/BBAN: use a hash of the name
+    const name = acc.details?.name || acc.details?.product || '';
+    const currency = acc.details?.currency || 'EUR';
+    const slug = `${name}_${currency}`.replace(/[^a-zA-Z0-9]/g, '_');
+    if (name) return `eb_name_${slug}`;
+    
+    return `enablebanking_${acc.accountId}`;
+  };
+
+  // Helper function to get exact name for matching
+  const getAccountName = (acc) => {
+    const currency = acc.details?.currency || 'EUR';
+    const name = acc.details?.name || acc.details?.product || 'Compte Bancaire';
+    return name + (currency !== 'EUR' ? ` (${currency})` : '');
+  };
+
   // Utiliser un effet pour que la présélection tienne compte de existingAssets même si ça charge en retard
   useEffect(() => {
     if (fetchedAccounts && existingAssets) {
       const preselected = fetchedAccounts
-        .filter(acc => !existingAssets.some(asset => asset.id === `enablebanking_${acc.accountId}`))
+        .filter(acc => {
+           const assetId = getStableAccountId(acc);
+           const assetName = getAccountName(acc);
+           const isAlreadyAdded = existingAssets.some(a => a.id === assetId || a.id === `enablebanking_${acc.accountId}` || (a.isAutoSynced && a.name === assetName));
+           return !isAlreadyAdded;
+        })
         .map(acc => acc.accountId);
       setSelectedAccountIds(preselected);
     }
@@ -187,13 +215,14 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
           <h4 className="font-semibold text-slate-800 mb-3">Comptes détectés</h4>
           <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
             {fetchedAccounts.map(acc => {
-              const assetId = `enablebanking_${acc.accountId}`;
-              const isAlreadyAdded = existingAssets.some(a => a.id === assetId);
+              const assetId = getStableAccountId(acc);
+              const assetName = getAccountName(acc);
+              const isAlreadyAdded = existingAssets.some(a => a.id === assetId || a.id === `enablebanking_${acc.accountId}` || (a.isAutoSynced && a.name === assetName));
               const isSelected = selectedAccountIds.includes(acc.accountId);
               
               const currency = acc.details?.currency || 'EUR';
-              const name = acc.details?.name || acc.details?.product || 'Compte Bancaire';
               const balance = acc.balances?.[0]?.balance_amount?.amount || 0;
+              const displayIban = acc.details?.account_id?.iban || acc.details?.account_id?.bban || acc.accountId.substring(0, 8) + '...';
 
               return (
                 <label key={acc.accountId} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${isAlreadyAdded ? 'bg-slate-50 border-slate-200 opacity-75' : isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
@@ -213,10 +242,10 @@ export default function BankSyncDashboard({ userId, onSyncComplete, existingAsse
                   <div className="ml-3 flex-1 flex justify-between items-center">
                     <div>
                       <p className="font-medium text-slate-800 flex items-center gap-2">
-                        {name} 
+                        {assetName} 
                         {isAlreadyAdded && <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">Déjà importé</span>}
                       </p>
-                      <p className="text-sm text-slate-500">{acc.details?.bank_name || 'Banque'} • {acc.details?.iban || acc.accountId.substring(0, 8) + '...'}</p>
+                      <p className="text-sm text-slate-500">{acc.details?.bank_name || 'Banque'} • {displayIban}</p>
                     </div>
                     <div className="font-semibold text-slate-900">
                       {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: currency }).format(balance)}

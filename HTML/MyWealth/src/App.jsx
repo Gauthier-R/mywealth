@@ -2802,7 +2802,22 @@ const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDelete
     const updatedTx = [...currentTx];
 
     syncedAccounts.forEach(acc => {
-      const assetId = `enablebanking_${acc.accountId}`;
+      // Helper function to get a stable ID from Enable Banking account
+      const getStableAccountId = (account) => {
+        const accIdObj = account.details?.account_id || {};
+        if (accIdObj.iban) return `eb_iban_${accIdObj.iban}`;
+        if (accIdObj.bban) return `eb_bban_${accIdObj.bban}`;
+        if (accIdObj.other?.identification) return `eb_other_${accIdObj.other.identification}`;
+        
+        const n = account.details?.name || account.details?.product || '';
+        const c = account.details?.currency || 'EUR';
+        const slug = `${n}_${c}`.replace(/[^a-zA-Z0-9]/g, '_');
+        if (n) return `eb_name_${slug}`;
+        
+        return `enablebanking_${account.accountId}`;
+      };
+
+      const assetId = getStableAccountId(acc);
       
       let value = 0;
       if (acc.balances && acc.balances.length > 0) {
