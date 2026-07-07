@@ -37,6 +37,7 @@ export default async function handler(req, res) {
     if (!sessionRes.ok) throw new Error(session.error || 'Failed to create session from code');
 
     const accounts = session.accounts || [];
+    const aspspTitle = session.aspsp?.title || session.aspsp?.name || 'Banque';
     const syncedData = [];
 
     // 2. For each account, fetch balances and transactions
@@ -57,7 +58,7 @@ export default async function handler(req, res) {
 
       syncedData.push({
         accountId: accountUid,
-        details: account,
+        details: { ...account, bank_name: aspspTitle },
         balances: balances.balances || [],
         transactions: transactions.transactions || []
       });
