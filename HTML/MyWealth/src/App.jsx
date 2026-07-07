@@ -2809,7 +2809,7 @@ const AssetsView = ({ assets, setAssets, transactions, onDeleteAsset, userId }) 
         id: `enablebanking_${acc.accountId}`,
         name: name + (currency !== 'EUR' ? ` (${currency})` : ''),
         institution: 'Banque Synchronisée',
-        type: 'liquidite', // default to liquidite for imported accounts
+        type: 'liquidite',
         value: value,
         isAutoSynced: true,
         history: [{ date: new Date().toISOString().split('T')[0], value }]
