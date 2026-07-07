@@ -2060,9 +2060,9 @@ const AssetDetailOverlay = ({ asset, onClose, onUpdate, transactions }) => {
                               <div className="text-right flex flex-col items-end">
                                 {point.movementAmount !== undefined && point.movementTag !== 'creation' && (
                                   <span className={`text-xs font-bold ${point.movementTag === 'buy' ? 'text-green-600' :
-                                      point.movementTag === 'sell' ? 'text-red-600' :
-                                        point.movementAmount > 0 ? 'text-blue-600' :
-                                          point.movementAmount < 0 ? 'text-orange-500' : 'text-slate-500'
+                                    point.movementTag === 'sell' ? 'text-red-600' :
+                                      point.movementAmount > 0 ? 'text-blue-600' :
+                                        point.movementAmount < 0 ? 'text-orange-500' : 'text-slate-500'
                                     }`}>
                                     {point.movementTag === 'buy' ? '+' : point.movementTag === 'sell' ? '-' : point.movementAmount > 0 ? '+' : ''}{formatCurrency(point.movementTag === 'sell' ? point.movementAmount : point.movementAmount)}
                                   </span>
