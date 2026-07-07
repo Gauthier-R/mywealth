@@ -2712,7 +2712,7 @@ const DashboardView = ({ assets, transactions, setActiveTab, onDeleteTransaction
 
 // ... AssetsView, BudgetView, AiAdvisorView remain largely the same, skipped for brevity but would be here ...
 
-const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDeleteAsset, userId }) => {
+const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDeleteAsset, userId, isBackgroundSyncing, setToast }) => {
   // Ajoutez ceci au tout début :
   if (assets === null) {
     return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -2932,7 +2932,7 @@ const AssetsView = ({ assets, setAssets, transactions, setTransactions, onDelete
                         onClick={(e) => {
                           e.stopPropagation();
                           window.scrollTo({ top: 0, behavior: 'smooth' });
-                          setToast({ type: 'warning', message: 'Veuillez reconnecter votre banque via le panneau ci-dessus pour renouveler l\\'accès 90 jours.' });
+                          setToast({ type: 'warning', message: "Veuillez reconnecter votre banque via le panneau ci-dessus pour renouveler l'accès 90 jours." });
                         }}
                       />
                     );
@@ -5212,7 +5212,7 @@ RÈGLES DE FORMAT :
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-8">
         {activeTab === 'dashboard' && <DashboardView assets={assets} transactions={transactions} setActiveTab={setActiveTab} onDeleteTransaction={handleDeleteTransaction} userProfile={userProfile} />}
-        {activeTab === 'assets' && <AssetsView assets={assets} setAssets={handleSetAssets} transactions={transactions} setTransactions={handleSetTransactions} onDeleteAsset={handleDeleteAsset} userId={user?.uid} />}
+        {activeTab === 'assets' && <AssetsView assets={assets} setAssets={handleSetAssets} transactions={transactions} setTransactions={handleSetTransactions} onDeleteAsset={handleDeleteAsset} userId={user?.uid} isBackgroundSyncing={isBackgroundSyncing} setToast={setToast} />}
         {activeTab === 'budget' && (
           <BudgetView
             transactions={transactions}
