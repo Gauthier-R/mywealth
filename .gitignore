@@ -34,3 +34,5 @@ dist-ssr
 # Tests et OS divers
 coverage/
 Thumbs.db
+.vercel
+.env*
