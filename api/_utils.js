@@ -31,6 +31,22 @@ export function decryptKey(encryptedHex) {
 
 // Génère un JWT pour l'API Enable Banking
 export function getEnableBankingToken(appId, privateKeyStr) {
+  // Fix potentially mangled private keys from Vercel environment variables
+  let formattedKey = privateKeyStr || '';
+  
+  // 1. Handle literal "\n" strings
+  formattedKey = formattedKey.replace(/\\n/g, '\n');
+  
+  // 2. Handle missing newlines (Vercel sometimes replaces newlines with spaces)
+  if (!formattedKey.includes('\n')) {
+    const match = formattedKey.match(/-----BEGIN PRIVATE KEY-----(.*?)-----END PRIVATE KEY-----/s);
+    if (match) {
+      const body = match[1].replace(/\s+/g, ''); // remove all spaces
+      const newBody = body.match(/.{1,64}/g).join('\n'); // chunk every 64 chars
+      formattedKey = `-----BEGIN PRIVATE KEY-----\n${newBody}\n-----END PRIVATE KEY-----`;
+    }
+  }
+
   // Le token est typiquement valide 1 heure
   const payload = {
     iss: 'enablebanking.com',
@@ -39,9 +55,7 @@ export function getEnableBankingToken(appId, privateKeyStr) {
     exp: Math.floor(Date.now() / 1000) + 3600
   };
 
-  // Enable Banking requiert que le "kid" (key ID) soit l'App ID si aucune key string n'est fournie, 
-  // mais la spec de base utilise l'App ID pour l'authentification
-  return jwt.sign(payload, privateKeyStr, {
+  return jwt.sign(payload, formattedKey, {
     algorithm: 'RS256',
     keyid: appId
   });
