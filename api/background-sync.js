@@ -16,14 +16,13 @@ export default async function handler(req, res) {
   try {
     if (!db) throw new Error('Database not initialized');
 
-    const userDoc = await db.collection('users').doc(uid).get();
-    if (!userDoc.exists || !userDoc.data().enablebanking_app_id_encrypted) {
-      return res.status(400).json({ error: 'Enable Banking keys not configured for this user' });
+    const appId = process.env.ENABLEBANKING_APP_ID;
+    const privateKey = process.env.ENABLEBANKING_PRIVATE_KEY;
+    
+    if (!appId || !privateKey) {
+      return res.status(500).json({ error: 'Global Enable Banking keys not configured on the server' });
     }
     
-    const data = userDoc.data();
-    const appId = decryptKey(data.enablebanking_app_id_encrypted);
-    const privateKey = decryptKey(data.enablebanking_private_key_encrypted);
     const token = getEnableBankingToken(appId, privateKey);
 
     const syncedData = [];

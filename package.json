@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "vercel:dev": "vercel dev --listen 5173",
     "build": "vite build",
     "deploy:sim": "npm run build && firebase deploy --only hosting:app-sim",
-    "deploy:prd": "npm run build && firebase deploy --only hosting:app-prd"
+    "deploy:prd": "npm run build && firebase deploy --only hosting:app-prd",
+    "deploy:staging": "npm run build && firebase deploy --project staging --only hosting:app-staging"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

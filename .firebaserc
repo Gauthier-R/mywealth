@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "nodejsfinary"
+    "default": "nodejsfinary",
+    "staging": "nodejsfinary-staging"
   },
   "targets": {
     "nodejsfinary": {
@@ -10,6 +11,13 @@
         ],
         "app-sim": [
           "nodejsfinary"
+        ]
+      }
+    },
+    "nodejsfinary-staging": {
+      "hosting": {
+        "app-staging": [
+          "nodejsfinary-staging"
         ]
       }
     }

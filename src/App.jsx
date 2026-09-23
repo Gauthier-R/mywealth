@@ -43,7 +43,7 @@ import { getFirestore, doc, setDoc, onSnapshot, getDoc } from 'firebase/firestor
 import ENV_CONFIG from './config/environment';
 
 // --- CONFIGURATION Enable Banking ---
-import EnableBankingSetup from './EnableBankingSetup';
+
 import BankSyncDashboard from './BankSyncDashboard';
 
 // --- API CONFIGURATION (via variables d'environnement) ---
@@ -558,7 +558,7 @@ const ProfileModal = ({ isOpen, onClose, user, userProfile, onUpdate, assets, tr
 
           {/* SYNCHRONISATION BANCAIRE */}
           <div className="border-t border-slate-100 pt-4">
-            <EnableBankingSetup userId={user?.uid} />
+
           </div>
 
           {/* SÉCURITÉ & BACKUP */}
